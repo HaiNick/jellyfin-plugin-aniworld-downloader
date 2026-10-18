@@ -5,13 +5,183 @@
     <title>AniWorld Downloader</title>
 </head>
 <body>
-    <div id="AniWorldDownloaderConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+    <div id="AniWorldDownloaderConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select,emby-checkbox">
         <div data-role="content">
             <div class="content-primary">
-                <h2 class="sectionTitle">AniWorld Downloader</h2>
-                <p>Milestone 0 spike. Settings arrive in milestone 2.</p>
+                <form id="AniWorldDownloaderConfigForm">
+                    <h2 class="sectionTitle">AniWorld Downloader</h2>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Connection</h3>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AniWorldUrl">AniWorld Downloader URL</label>
+                            <input id="AniWorldUrl" name="AniWorldUrl" type="url" is="emby-input" placeholder="http://192.168.178.168:8069" />
+                            <div class="fieldDescription">As the Jellyfin server reaches it. Phones never call it directly.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="ApiKey">API key</label>
+                            <input id="ApiKey" name="ApiKey" type="password" is="emby-input" autocomplete="off" />
+                            <div class="fieldDescription">
+                                Create one in AniWorld Downloader under Settings → API Keys. A key with
+                                "Read and download" access is enough. It stays on this server.
+                            </div>
+                        </div>
+                        <div>
+                            <button id="AniWorldTestConnection" is="emby-button" type="button" class="raised emby-button">
+                                <span>Test connection</span>
+                            </button>
+                            <div id="AniWorldTestResult" class="fieldDescription" style="margin-top:.5em"></div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Downloads</h3>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="DefaultLanguage">Default language</label>
+                            <select is="emby-select" id="DefaultLanguage" name="DefaultLanguage" class="emby-select-withcolor emby-select">
+                                <option value="German Dub">German Dub</option>
+                                <option value="German Sub">German Sub</option>
+                                <option value="English Dub">English Dub</option>
+                                <option value="English Sub">English Sub</option>
+                            </select>
+                        </div>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="DefaultProvider">Default hoster</label>
+                            <select is="emby-select" id="DefaultProvider" name="DefaultProvider" class="emby-select-withcolor emby-select">
+                                <option value="VOE">VOE</option>
+                                <option value="Vidmoly">Vidmoly</option>
+                                <option value="Vidoza">Vidoza</option>
+                                <option value="Doodstream">Doodstream</option>
+                                <option value="Filemoon">Filemoon</option>
+                                <option value="Gupload">Gupload</option>
+                                <option value="Vidara">Vidara</option>
+                                <option value="MegaKino">MegaKino</option>
+                                <option value="MoflixClick">MoflixClick</option>
+                            </select>
+                            <div class="fieldDescription">Used when a title offers it; users can still pick another one.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3 class="sectionTitle">Who may download</h3>
+                        <div class="fieldDescription" style="margin-bottom:1em">
+                            Everyone who is logged in may search. Admins may always download; tick the other users
+                            who may too.
+                        </div>
+                        <div id="AniWorldDownloadUsers" class="checkboxList paperList" style="padding:.5em 1em"></div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '31b711c1-95e5-4481-b7cc-3e43b0476b6d';
+                var page = document.querySelector('#AniWorldDownloaderConfigPage');
+
+                function field(id) {
+                    return page.querySelector('#' + id);
+                }
+
+                function escapeHtml(value) {
+                    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                }
+
+                function renderUsers(users, allowed) {
+                    var list = field('AniWorldDownloadUsers');
+                    var others = users.filter(function (u) { return !(u.Policy && u.Policy.IsAdministrator); });
+                    if (!others.length) {
+                        list.innerHTML = '<div class="fieldDescription">There are no users besides admins.</div>';
+                        return;
+                    }
+
+                    list.innerHTML = others.map(function (u) {
+                        var checked = allowed.indexOf(u.Id) >= 0 ? ' checked' : '';
+                        return '<label class="emby-checkbox-label"><input type="checkbox" is="emby-checkbox" ' +
+                            'class="chkDownloadUser" data-id="' + escapeHtml(u.Id) + '"' + checked + '/>' +
+                            '<span>' + escapeHtml(u.Name) + '</span></label>';
+                    }).join('');
+                }
+
+                // Jellyfin returns user IDs without dashes, config GUIDs may have them
+                function normaliseId(id) {
+                    return String(id || '').replace(/-/g, '').toLowerCase();
+                }
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getUsers()]).then(function (r) {
+                        var config = r[0];
+                        field('AniWorldUrl').value = config.AniWorldUrl || '';
+                        field('ApiKey').value = config.ApiKey || '';
+                        field('DefaultLanguage').value = config.DefaultLanguage || 'German Dub';
+                        field('DefaultProvider').value = config.DefaultProvider || 'VOE';
+                        r[1].forEach(function (u) { u.Id = normaliseId(u.Id); });
+                        renderUsers(r[1], (config.DownloadUserIds || []).map(normaliseId));
+                        Dashboard.hideLoadingMsg();
+                    }, function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+                field('AniWorldTestConnection').addEventListener('click', function () {
+                    var result = field('AniWorldTestResult');
+                    result.textContent = 'Testing…';
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('AniWorldDownloader/TestConnection'),
+                        data: JSON.stringify({ Url: field('AniWorldUrl').value, ApiKey: field('ApiKey').value }),
+                        contentType: 'application/json',
+                        dataType: 'json'
+                    }).then(function (ping) {
+                        var who = ping.method === 'api_key'
+                            ? 'key "' + ping.name + '" with ' + ping.scope + ' access'
+                            : 'no key needed (login is off in AniWorld Downloader)';
+                        var warn = ping.method === 'api_key' && ping.scope === 'read'
+                            ? ' This key can only read: downloads will fail.' : '';
+                        result.textContent = 'Connected to AniWorld Downloader ' + ping.version + ', ' + who + '.' + warn;
+                    }, function (err) {
+                        var status = err && err.status;
+                        if (err && typeof err.json === 'function') {
+                            err.json().then(function (body) {
+                                result.textContent = 'Failed (' + status + '): ' + (body.error || 'unknown error');
+                            }, function () {
+                                result.textContent = 'Failed (' + status + ').';
+                            });
+                        } else {
+                            result.textContent = 'Failed' + (status ? ' (' + status + ')' : '') + '.';
+                        }
+                    });
+                });
+
+                field('AniWorldDownloaderConfigForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.AniWorldUrl = field('AniWorldUrl').value.trim();
+                        config.ApiKey = field('ApiKey').value.trim();
+                        config.DefaultLanguage = field('DefaultLanguage').value;
+                        config.DefaultProvider = field('DefaultProvider').value;
+                        config.DownloadUserIds = Array.prototype.map.call(
+                            page.querySelectorAll('.chkDownloadUser:checked'),
+                            function (box) { return box.getAttribute('data-id'); });
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
+                    }).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    }, function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                    return false;
+                });
+            })();
+        </script>
     </div>
 </body>
 </html>

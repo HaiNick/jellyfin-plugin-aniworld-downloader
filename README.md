@@ -4,8 +4,31 @@ A Jellyfin plugin for searching and downloading anime, series and movies
 through [AniWorld Downloader](https://github.com/HaiNick/AniWorld-Downloader),
 right from Jellyfin, including the official Jellyfin Android and iOS apps.
 
-**Status:** milestone 0 (spike). Right now the plugin only adds an **AniWorld**
-entry next to Favorites and a hello-world page that shows the logged-in user.
+**Status:** milestone 2. The backend is done: a settings page, and an API
+that passes search, details, downloads, the queue, Auto-Sync and posters on
+to AniWorld Downloader. The **AniWorld** page itself is still a placeholder;
+the search and download UI is milestone 3.
+
+## API
+
+Everything is under `/AniWorldDownloader` and needs a Jellyfin login.
+
+| Endpoint | Who | What |
+|---|---|---|
+| `GET Info` | anyone | Set up yet? May this user download? Default picks |
+| `POST Search` `{Keyword, Type}` | anyone | All sites, aniworld first; Type: all, anime, series, movie |
+| `GET Series?url=` | anyone | Title, poster, description, genres |
+| `GET Seasons?url=` | anyone | Seasons |
+| `GET Episodes?url=&seriesUrl=` | anyone | Episodes with languages |
+| `GET Providers?url=` | anyone | Hosters per language |
+| `GET Queue?limit=&offset=&status=` | anyone | The download queue |
+| `POST Download` `{Episodes, Language, Provider, Title, SeriesUrl}` | may download | Queue episodes |
+| `GET/POST AutoSync/Tracked` | POST: may download | "Sync this with Auto-Sync" |
+| `GET Image?url=&sig=` | no login | Posters, only links the plugin signed |
+| `POST TestConnection` `{Url, ApiKey}` | admins | AniWorld's `/api/ping` |
+
+Admins may always download; other users only when ticked in the settings.
+The AniWorld URL and key never leave the Jellyfin server.
 
 ## How it works
 
@@ -27,8 +50,13 @@ entry next to Favorites and a hello-world page that shows the logged-in user.
 ## Build
 
 ```sh
+dotnet test Jellyfin.Plugin.AniWorldDownloader.Tests
 dotnet publish Jellyfin.Plugin.AniWorldDownloader -c Release -o artifacts
 ```
+
+Run the tests before every install. Jellyfin builds all plugin controllers
+at startup, and one bad attribute stops the whole server from starting; the
+tests build them the same way and fail first.
 
 Without a local SDK:
 
