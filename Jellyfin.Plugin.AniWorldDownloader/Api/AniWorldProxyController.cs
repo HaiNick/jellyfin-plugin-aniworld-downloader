@@ -1,13 +1,16 @@
 using System.Net.Mime;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jellyfin.Data;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.AniWorldDownloader.AniWorld;
 using Jellyfin.Plugin.AniWorldDownloader.Library;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.AniWorldDownloader.Api;
@@ -24,9 +27,14 @@ public class AniWorldProxyController : ControllerBase
 {
     private static readonly string[] _searchTypes = ["all", "anime", "series", "movie"];
 
+    // AniWorld's browse lists, see _BROWSE_ROWS in its api_media.py
+    private static readonly string[] _browseLists = ["new-animes", "popular-animes", "new-series", "popular-series", "popular-movies"];
+
     private readonly IAuthorizationContext _authContext;
     private readonly AniWorldClient _aniWorld;
     private readonly LibraryMatcher _library;
+    private readonly DownloadOwners _owners;
+    private readonly ILibraryManager _libraryManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniWorldProxyController"/> class.
@@ -34,11 +42,20 @@ public class AniWorldProxyController : ControllerBase
     /// <param name="authContext">The authorization context.</param>
     /// <param name="aniWorld">The AniWorld Downloader client.</param>
     /// <param name="library">Matches titles against the Jellyfin library.</param>
-    public AniWorldProxyController(IAuthorizationContext authContext, AniWorldClient aniWorld, LibraryMatcher library)
+    /// <param name="owners">Who queued which download, for the "done" message.</param>
+    /// <param name="libraryManager">The library manager.</param>
+    public AniWorldProxyController(
+        IAuthorizationContext authContext,
+        AniWorldClient aniWorld,
+        LibraryMatcher library,
+        DownloadOwners owners,
+        ILibraryManager libraryManager)
     {
         _authContext = authContext;
         _aniWorld = aniWorld;
         _library = library;
+        _owners = owners;
+        _libraryManager = libraryManager;
     }
 
     /// <summary>
@@ -92,6 +109,171 @@ public class AniWorldProxyController : ControllerBase
 
         var body = new JsonObject { ["keyword"] = keyword, ["site"] = "all", ["type"] = type };
         var reply = await _aniWorld.SendAsync(HttpMethod.Post, "search", null, body, cancellationToken).ConfigureAwait(false);
+        if (reply.Json?["results"] is JsonArray results && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        {
+            foreach (var result in results.OfType<JsonObject>())
+            {
+                MarkLibraryItem(result, caller);
+            }
+        }
+
+        return Reply(reply);
+    }
+
+    /// <summary>
+    /// Searches every site and sends each site's results as soon as it
+    /// answers: one JSON object per line, {site, results, pending}, then
+    /// {"done": true}. Hits already in the library carry libraryItemId.
+    /// </summary>
+    /// <param name="request">The search.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task.</returns>
+    [HttpPost("SearchStream")]
+    [Produces("application/x-ndjson")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task SearchStream([FromBody] SearchRequest request, CancellationToken cancellationToken)
+    {
+        var keyword = request.Keyword?.Trim();
+        var type = string.IsNullOrWhiteSpace(request.Type) ? "all" : request.Type.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(keyword) || !_searchTypes.Contains(type))
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            await Response.WriteAsJsonAsync(
+                new JsonObject { ["error"] = string.IsNullOrEmpty(keyword) ? "keyword is required" : "type must be all, anime, series or movie" },
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var caller = await GetCallerAsync().ConfigureAwait(false);
+        var body = new JsonObject { ["keyword"] = keyword, ["type"] = type };
+        var (upstream, error) = await _aniWorld.OpenStreamAsync("search/stream", body, cancellationToken).ConfigureAwait(false);
+        if (upstream is null)
+        {
+            Response.StatusCode = error!.Status;
+            await Response.WriteAsJsonAsync(error.Json, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        using (upstream)
+        {
+            Response.ContentType = "application/x-ndjson; charset=utf-8";
+            Response.Headers.CacheControl = "no-cache";
+            // Each line has to reach the phone when it is written, not at the end
+            HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+
+            using var reader = new StreamReader(await upstream.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false));
+            string? line;
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                JsonNode? node;
+                try
+                {
+                    node = JsonNode.Parse(line);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                AniWorldClient.RewritePosters(node);
+                if (node?["results"] is JsonArray results && caller is not null)
+                {
+                    foreach (var result in results.OfType<JsonObject>())
+                    {
+                        MarkLibraryItem(result, caller);
+                    }
+                }
+
+                await Response.WriteAsync(node!.ToJsonString() + "\n", cancellationToken).ConfigureAwait(false);
+                await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds the AniWorld page for a series in the Jellyfin library, for the
+    /// "missing episodes" button on Jellyfin's own series page.
+    /// </summary>
+    /// <param name="itemId">The Jellyfin series.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>{url, title, site} when found, {query} to search for otherwise.</returns>
+    [HttpGet("FindSource")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> FindSource([FromQuery] Guid itemId, CancellationToken cancellationToken)
+    {
+        var caller = await GetCallerAsync().ConfigureAwait(false);
+        if (caller is null)
+        {
+            return Unauthorized();
+        }
+
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null || !item.IsVisible(caller.User))
+        {
+            return NotFound(new JsonObject { ["error"] = "Not in your library" });
+        }
+
+        // The folder name is what AniWorld itself named a download, so for
+        // anything it fetched that is the surest match
+        var names = new[] { item.Name, item.OriginalTitle, Path.GetFileName(item.Path?.TrimEnd('/', '\\')) }
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!)
+            .DistinctBy(LibraryMatcher.Normalise)
+            .ToList();
+        var wanted = names.Select(LibraryMatcher.Normalise).ToHashSet();
+
+        foreach (var name in names)
+        {
+            var body = new JsonObject { ["keyword"] = name, ["site"] = "all", ["type"] = "all" };
+            var reply = await _aniWorld.SendAsync(HttpMethod.Post, "search", null, body, cancellationToken).ConfigureAwait(false);
+            if (reply.Json?["results"] is not JsonArray results)
+            {
+                continue;
+            }
+
+            var match = results.OfType<JsonObject>().FirstOrDefault(r =>
+                r["type"]?.GetValue<string>() is "anime" or "series"
+                && wanted.Contains(LibraryMatcher.Normalise(r["title"]?.GetValue<string>())));
+            if (match is not null)
+            {
+                return Ok(new JsonObject
+                {
+                    ["url"] = match["url"]?.DeepClone(),
+                    ["title"] = match["title"]?.DeepClone(),
+                    ["site"] = match["site"]?.DeepClone(),
+                });
+            }
+        }
+
+        // No sure match: let the user pick from a search instead
+        return Ok(new JsonObject { ["query"] = names.FirstOrDefault() ?? item.Name });
+    }
+
+    /// <summary>
+    /// One of AniWorld's browse lists, for the page before anything is searched.
+    /// Hits already in the library carry libraryItemId.
+    /// </summary>
+    /// <param name="list">new-animes, popular-animes, new-series, popular-series or popular-movies.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The list.</returns>
+    [HttpGet("Browse/{list}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> Browse([FromRoute] string list, CancellationToken cancellationToken)
+    {
+        if (!_browseLists.Contains(list))
+        {
+            return NotFound(new JsonObject { ["error"] = "Unknown list" });
+        }
+
+        var reply = await _aniWorld.SendAsync(HttpMethod.Get, list, null, null, cancellationToken).ConfigureAwait(false);
         if (reply.Json?["results"] is JsonArray results && await GetCallerAsync().ConfigureAwait(false) is { } caller)
         {
             foreach (var result in results.OfType<JsonObject>())
@@ -235,7 +417,16 @@ public class AniWorldProxyController : ControllerBase
             ["title"] = Pick(request.Title, "Unknown"),
             ["series_url"] = request.SeriesUrl ?? string.Empty,
         };
-        return Reply(await _aniWorld.SendAsync(HttpMethod.Post, "download", null, body, cancellationToken).ConfigureAwait(false));
+        var reply = await _aniWorld.SendAsync(HttpMethod.Post, "download", null, body, cancellationToken).ConfigureAwait(false);
+
+        // So the "done" message goes to whoever asked for it
+        if (reply.Json?["queue_id"] is JsonValue queueId && queueId.TryGetValue<int>(out var id)
+            && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        {
+            _owners.Add(id, caller.User.Id);
+        }
+
+        return Reply(reply);
     }
 
     /// <summary>

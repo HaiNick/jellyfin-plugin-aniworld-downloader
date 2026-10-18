@@ -4,16 +4,26 @@ A Jellyfin plugin for searching and downloading anime, series and movies
 through [AniWorld Downloader](https://github.com/HaiNick/AniWorld-Downloader),
 right from Jellyfin, including the official Jellyfin Android and iOS apps.
 
-**Status:** milestone 3. The **AniWorld** entry (top bar, or ☰ on phones)
-opens a search with the tabs All, Anime, Series and Movies. A title shows its
-seasons and episodes with their languages; pick a language and hoster, tick
-episodes and download. Tested in the web client and the official Android app.
+The **AniWorld** entry (top bar, or ☰ on phones) opens a search with the tabs
+All, Anime, Series and Movies. Results arrive site by site as each site
+answers, so one slow site doesn't hold up the rest. Before you search, the
+page shows AniWorld's lists of new and popular anime, series and movies.
 
-Titles you already have get an **In library** badge and a link to the
-Jellyfin item; only libraries the user can see count. aniworld and s.to
-titles have a **Keep up to date with Auto-Sync** switch with a start point
-and schedule (when Auto-Sync is on in AniWorld Downloader). **Queue** shows
-the downloads with live progress, and users who may download can cancel.
+A title shows its seasons and episodes with their languages; pick a language
+and hoster, tick episodes and download. When it's done, whoever started it
+gets a message in their open Jellyfin apps, and the dashboard's Activity log
+has an entry. Tested in the web client and the official Android app.
+
+- **In library:** titles you already have get a badge and a link to the
+  Jellyfin item; only libraries the user can see count. A switch next to the
+  tabs shows only those.
+- **Missing episodes:** Jellyfin's own series page gets a download button
+  that opens the series on AniWorld with the episodes you don't have ticked.
+- **Auto-Sync:** aniworld and s.to titles have a **Keep up to date with
+  Auto-Sync** switch with a start point and schedule (when Auto-Sync is on in
+  AniWorld Downloader).
+- **Queue:** the downloads with live progress; users who may download can
+  cancel.
 
 ## API
 
@@ -23,6 +33,9 @@ Everything is under `/AniWorldDownloader` and needs a Jellyfin login.
 |---|---|---|
 | `GET Info` | anyone | Set up yet? May this user download? Default picks |
 | `POST Search` `{Keyword, Type}` | anyone | All sites, aniworld first; Type: all, anime, series, movie. Hits already in the library carry `libraryItemId` |
+| `POST SearchStream` `{Keyword, Type}` | anyone | The same, one JSON line per site as it answers: `{site, results, pending}`, then `{"done": true}` |
+| `GET Browse/{list}` | anyone | new-animes, popular-animes, new-series, popular-series or popular-movies |
+| `GET FindSource?itemId=` | anyone | The AniWorld page of a library series: `{url, title, site}`, or `{query}` to search for |
 | `GET Series?url=` | anyone | Title, poster, description, genres, and `libraryItemId` when in the library |
 | `GET Seasons?url=` | anyone | Seasons |
 | `GET Episodes?url=&seriesUrl=` | anyone | Episodes with languages |

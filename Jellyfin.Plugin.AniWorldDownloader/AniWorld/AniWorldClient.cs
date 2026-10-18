@@ -246,9 +246,70 @@ public class AniWorldClient
         return true;
     }
 
-    // Swaps AniWorld's own poster links for signed links to the plugin's image
-    // route, wherever they sit in the reply.
-    private static void RewritePosters(JsonNode? node)
+    /// <summary>
+    /// Opens a streamed AniWorld reply, such as /api/search/stream, without
+    /// waiting for it to finish. The caller reads it and disposes it.
+    /// </summary>
+    /// <param name="path">The path below /api/.</param>
+    /// <param name="body">The JSON body.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The open response, or an error reply when there is none.</returns>
+    public async Task<(HttpResponseMessage? Response, AniWorldReply? Error)> OpenStreamAsync(
+        string path,
+        JsonNode body,
+        CancellationToken cancellationToken)
+    {
+        if (!TryBuildUri(Config.AniWorldUrl, "api/" + path, null, out var uri))
+        {
+            return (null, AniWorldReply.Error(503, "AniWorld Downloader is not set up yet. An admin can add its URL in the plugin settings."));
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        if (!string.IsNullOrWhiteSpace(Config.ApiKey))
+        {
+            request.Headers.Add("X-API-Key", Config.ApiKey.Trim());
+        }
+
+        try
+        {
+            var client = CreateClient();
+            // Headers only: the body arrives line by line while the sites answer
+            var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                return (response, null);
+            }
+
+            var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var status = (int)response.StatusCode;
+            response.Dispose();
+            JsonNode? json = null;
+            try
+            {
+                json = JsonNode.Parse(text);
+            }
+            catch (JsonException)
+            {
+            }
+
+            return (null, json is JsonObject ? new AniWorldReply(status, json) : AniWorldReply.Error(502, $"AniWorld Downloader answered HTTP {status}."));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "AniWorld Downloader unreachable for {Path}", path);
+            return (null, AniWorldReply.Error(502, "Could not reach AniWorld Downloader: " + ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Swaps AniWorld's own poster links for signed links to the plugin's image
+    /// route, wherever they sit in the reply.
+    /// </summary>
+    /// <param name="node">The reply, or a part of it.</param>
+    public static void RewritePosters(JsonNode? node)
     {
         switch (node)
         {

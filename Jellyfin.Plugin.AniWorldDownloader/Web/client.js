@@ -206,6 +206,12 @@
             '#' + PAGE_ID + ' .aniworld-status{margin:1.5em 0;opacity:.8}',
             // Three across on a phone, like Jellyfin's own library pages
             '#' + PAGE_ID + ' .aniworld-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(9.5em,28%),1fr));gap:1.25em .9em}',
+            // Browse lists scroll sideways, like the rows on Jellyfin's home page
+            '#' + PAGE_ID + ' .aniworld-browse-list{margin-bottom:1.5em}',
+            '#' + PAGE_ID + ' .aniworld-browse-list .sectionTitle{margin:0 0 .5em}',
+            '#' + PAGE_ID + ' .aniworld-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(min(9.5em,28%),9.5em);' +
+            'gap:.9em;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding-bottom:.5em}',
+            '#' + PAGE_ID + ' .aniworld-row .aniworld-card{scroll-snap-align:start}',
             '#' + PAGE_ID + ' .aniworld-card{display:block;color:inherit;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent}',
             // Not Jellyfin's cardImageContainer: it forces background-clip to
             // the content box, which leaves a box like this one blank
@@ -390,8 +396,9 @@
             return;
         }
 
+        var grid = inner.querySelector('.aniworld-grid');
         if (!keyword) {
-            status.textContent = 'Anime come from AniWorld, series from S.to, movies from every movie site.';
+            renderBrowse(inner, grid, status, params, tab, onlyLibrary);
             if (!('ontouchstart' in window)) {
                 input.focus();
             }
@@ -399,54 +406,219 @@
         }
 
         var view = renderedHash;
+        var total = 0;
+        var shown = 0;
+
+        function show(results, pending) {
+            total += results.length;
+            results.forEach(function (item) {
+                if (!onlyLibrary || item.libraryItemId) {
+                    shown++;
+                    grid.appendChild(makeCard(item, params));
+                }
+            });
+
+            var text;
+            if (pending && pending.length) {
+                text = 'Still searching ' + pending.map(siteName).join(', ') + '…';
+            } else if (!total) {
+                text = 'Nothing found for “' + keyword + '”.';
+            } else if (onlyLibrary && !shown) {
+                text = 'None of the ' + total + ' results for “' + keyword + '” are in your library.';
+            } else {
+                text = onlyLibrary ? shown + ' of ' + total + ' results are in your library.' : '';
+            }
+            status.textContent = text;
+        }
+
+        var key = 'search|' + tab + '|' + keyword.toLowerCase();
+        if (cache[key]) {
+            // Back from a title: the finished search, at once
+            cache[key].then(function (results) {
+                if (!isStale(view, inner)) {
+                    show(results, null);
+                }
+            });
+            return;
+        }
+
         status.textContent = 'Searching…';
-        cached('search|' + tab + '|' + keyword.toLowerCase(), function () {
-            return api('POST', 'Search', { Keyword: keyword, Type: tab });
-        }).then(function (reply) {
+        var collected = [];
+        searchStream(keyword, tab, function (event) {
             if (isStale(view, inner)) {
-                return;
+                return false;
             }
 
-            var results = reply.results || [];
-            var shown = onlyLibrary ? results.filter(function (r) { return r.libraryItemId; }) : results;
-            if (!results.length) {
-                status.textContent = 'Nothing found for “' + keyword + '”.';
-            } else if (!shown.length) {
-                status.textContent = 'None of the ' + results.length + ' results for “' + keyword + '” are in your library.';
-            } else {
-                status.textContent = onlyLibrary ? shown.length + ' of ' + results.length + ' results are in your library.' : '';
+            collected = collected.concat(event.results || []);
+            show(event.results || [], event.pending);
+            return true;
+        }).then(function () {
+            cache[key] = Promise.resolve(collected);
+            if (!isStale(view, inner)) {
+                show([], null);
             }
-            renderResults(inner.querySelector('.aniworld-grid'), shown, params);
         }, function (err) {
-            status.textContent = 'Search failed: ' + err.message;
+            if (!isStale(view, inner)) {
+                status.textContent = 'Search failed: ' + err.message;
+            }
         });
     }
 
-    function renderResults(grid, results, params) {
-        grid.innerHTML = '';
-        results.forEach(function (item) {
-            var card = el(
-                '<a class="aniworld-card" role="button">' +
-                '<div class="aniworld-poster">' +
-                '<div class="aniworld-poster-empty" aria-hidden="true">' + escapeHtml(item.title.charAt(0)) + '</div>' +
-                '<span class="aniworld-badge aniworld-badge-site">' + escapeHtml(siteName(item.site)) + '</span>' +
-                (item.libraryItemId ? '<span class="aniworld-badge aniworld-badge-library">In library</span>' : '') +
-                '</div>' +
-                '<div class="aniworld-card-title">' + escapeHtml(item.title) + '</div>' +
-                '</a>');
-            card.addEventListener('click', function () {
-                routeTo({ q: params.get('q'), t: params.get('t'), lib: params.get('lib'), u: item.url });
+    // Reads /SearchStream line by line: each site's results arrive as soon as
+    // that site has answered. onEvent returns false to stop listening.
+    function searchStream(keyword, tab, onEvent) {
+        var client = window.ApiClient;
+        if (!client || !window.fetch || !window.TextDecoder || !window.ReadableStream) {
+            // No streaming here: one reply with everything
+            return api('POST', 'Search', { Keyword: keyword, Type: tab }).then(function (reply) {
+                onEvent({ results: reply.results || [], pending: [] });
             });
-            grid.appendChild(card);
+        }
 
-            var poster = card.querySelector('.aniworld-poster');
-            if (item.poster_url) {
-                showPoster(poster, item.poster_url);
-            } else {
-                // aniworld's search has no posters; fetch them as cards scroll in
-                watchPoster(poster, item.url);
+        return fetch(client.getUrl('AniWorldDownloader/SearchStream'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'MediaBrowser Token="' + client.accessToken() + '"'
+            },
+            body: JSON.stringify({ Keyword: keyword, Type: tab })
+        }).then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (data) {
+                    throw new Error((data && data.error) || ('HTTP ' + response.status));
+                }, function () {
+                    throw new Error('HTTP ' + response.status);
+                });
             }
+
+            var reader = response.body.getReader();
+            var decoder = new TextDecoder();
+            var buffer = '';
+
+            function read() {
+                return reader.read().then(function (chunk) {
+                    buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
+                    var lines = buffer.split('\n');
+                    buffer = chunk.done ? '' : lines.pop();
+                    for (var i = 0; i < lines.length; i++) {
+                        if (!lines[i].trim()) {
+                            continue;
+                        }
+
+                        var event = JSON.parse(lines[i]);
+                        if (event.done) {
+                            return undefined;
+                        }
+
+                        if (onEvent(event) === false) {
+                            reader.cancel();
+                            return undefined;
+                        }
+                    }
+
+                    return chunk.done ? undefined : read();
+                });
+            }
+
+            return read();
         });
+    }
+
+    // What the page shows before anything is searched: AniWorld's own lists
+    var BROWSE_LISTS = [
+        { id: 'new-animes', label: 'New anime', tabs: ['all', 'anime'] },
+        { id: 'popular-animes', label: 'Popular anime', tabs: ['all', 'anime'] },
+        { id: 'new-series', label: 'New series', tabs: ['all', 'series'] },
+        { id: 'popular-series', label: 'Popular series', tabs: ['all', 'series'] },
+        { id: 'popular-movies', label: 'Popular movies', tabs: ['all', 'movie'] }
+    ];
+
+    // AniWorld's lists don't say which site a title is on; the link does
+    function siteFromUrl(url) {
+        try {
+            var host = new URL(url).hostname.replace(/^www\./, '');
+            if (host === 'aniworld.to') {
+                return 'aniworld';
+            }
+
+            if (host === 'serienstream.to' || host === 's.to') {
+                return 'sto';
+            }
+
+            return host.split('.')[0];
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function renderBrowse(inner, grid, status, params, tab, onlyLibrary) {
+        var view = renderedHash;
+        status.textContent = '';
+        grid.className = 'aniworld-browse';
+        BROWSE_LISTS.filter(function (list) { return list.tabs.indexOf(tab) >= 0; }).forEach(function (list) {
+            var section = el(
+                '<div class="aniworld-browse-list">' +
+                '<h2 class="sectionTitle sectionTitle-cards">' + escapeHtml(list.label) + '</h2>' +
+                '<div class="aniworld-row"><div class="aniworld-status">Loading…</div></div>' +
+                '</div>');
+            grid.appendChild(section);
+            var row = section.querySelector('.aniworld-row');
+
+            cached('browse|' + list.id, function () {
+                return api('GET', 'Browse/' + list.id);
+            }).then(function (reply) {
+                if (isStale(view, inner)) {
+                    return;
+                }
+
+                var items = (reply.results || []).filter(function (item) {
+                    return !onlyLibrary || item.libraryItemId;
+                });
+                if (!items.length) {
+                    // An empty list is just noise on the page
+                    section.remove();
+                    return;
+                }
+
+                row.innerHTML = '';
+                items.forEach(function (item) {
+                    row.appendChild(makeCard({
+                        title: item.title,
+                        url: item.url,
+                        site: siteFromUrl(item.url),
+                        poster_url: item.poster_url,
+                        libraryItemId: item.libraryItemId
+                    }, params));
+                });
+            }, function () {
+                section.remove();
+            });
+        });
+    }
+
+    function makeCard(item, params) {
+        var card = el(
+            '<a class="aniworld-card" role="button">' +
+            '<div class="aniworld-poster">' +
+            '<div class="aniworld-poster-empty" aria-hidden="true">' + escapeHtml(item.title.charAt(0)) + '</div>' +
+            (item.site ? '<span class="aniworld-badge aniworld-badge-site">' + escapeHtml(siteName(item.site)) + '</span>' : '') +
+            (item.libraryItemId ? '<span class="aniworld-badge aniworld-badge-library">In library</span>' : '') +
+            '</div>' +
+            '<div class="aniworld-card-title">' + escapeHtml(item.title) + '</div>' +
+            '</a>');
+        card.addEventListener('click', function () {
+            routeTo({ q: params.get('q'), t: params.get('t'), lib: params.get('lib'), u: item.url });
+        });
+
+        var poster = card.querySelector('.aniworld-poster');
+        if (item.poster_url) {
+            showPoster(poster, item.poster_url);
+        } else {
+            // aniworld's search has no posters; fetch them as cards scroll in
+            watchPoster(poster, item.url);
+        }
+
+        return card;
     }
 
     function showPoster(poster, path) {
@@ -593,7 +765,7 @@
                 return;
             }
 
-            new DetailState(inner, url, seasons, info).start();
+            new DetailState(inner, url, seasons, info, params.get('missing') === '1').start();
         }, function (err) {
             status.textContent = 'Could not load the seasons: ' + err.message;
         });
@@ -840,7 +1012,10 @@
         return 'Season ' + season.season_number;
     }
 
-    function DetailState(inner, seriesUrl, seasons, info) {
+    // tickMissing: opened from Jellyfin's series page, so the episodes not in
+    // the library yet start ticked
+    function DetailState(inner, seriesUrl, seasons, info, tickMissing) {
+        this.tickMissing = tickMissing;
         this.inner = inner;
         this.seriesUrl = seriesUrl;
         this.seasons = seasons;
@@ -908,6 +1083,12 @@
 
             self.episodes = reply.episodes || [];
             status.textContent = self.episodes.length ? '' : 'No episodes in this season.';
+            if (self.tickMissing && self.episodes.length) {
+                var missing = self.episodes.filter(function (ep) { return !ep.downloaded; }).length;
+                status.textContent = missing
+                    ? 'Ticked the ' + missing + (missing === 1 ? ' episode' : ' episodes') + ' of this season you don’t have yet.'
+                    : 'You already have every episode of this season.';
+            }
             self.renderEpisodes();
             self.loadProviders();
         }, function (err) {
@@ -934,7 +1115,8 @@
             }
 
             return '<label class="aniworld-episode listItem">' +
-                '<input type="checkbox" data-index="' + i + '"' + (single ? ' checked' : '') + '>' +
+                '<input type="checkbox" data-index="' + i + '"' +
+                ((self.tickMissing ? !ep.downloaded : single) ? ' checked' : '') + '>' +
                 '<div class="aniworld-episode-text">' +
                 '<div class="aniworld-episode-title">' + escapeHtml(heading) + '</div>' +
                 '<div>' + badges + '</div>' +
@@ -1098,6 +1280,90 @@
     };
 
     // ------------------------------------------------------------------
+    // Button on Jellyfin's own series page
+    // ------------------------------------------------------------------
+    // Item types by ID, so a page that re-renders doesn't ask again
+    var itemTypes = {};
+
+    function detailsItemId() {
+        var hash = window.location.hash;
+        var query = hash.indexOf('?');
+        if (query < 0 || hash.slice(0, query) !== '#/details') {
+            return null;
+        }
+
+        return new URLSearchParams(hash.slice(query + 1)).get('id');
+    }
+
+    function addSeriesButton() {
+        var id = detailsItemId();
+        if (!id || !window.ApiClient) {
+            return;
+        }
+
+        // Jellyfin keeps earlier pages in the DOM; the one on screen counts
+        var boxes = document.querySelectorAll('.mainDetailButtons');
+        var box = null;
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i].offsetParent !== null) {
+                box = boxes[i];
+            }
+        }
+
+        if (!box || box.querySelector('[' + MARK + ']')) {
+            return;
+        }
+
+        if (!(id in itemTypes)) {
+            itemTypes[id] = null;
+            window.ApiClient.getItem(window.ApiClient.getCurrentUserId(), id).then(function (item) {
+                itemTypes[id] = item.Type;
+                update();
+            }, function () {
+                itemTypes[id] = '';
+            });
+            return;
+        }
+
+        if (itemTypes[id] !== 'Series') {
+            return;
+        }
+
+        getInfo().then(function (info) {
+            if (!info.configured || box.querySelector('[' + MARK + ']')) {
+                return;
+            }
+
+            var button = el(
+                '<button type="button" is="emby-button" class="button-flat detailButton emby-button" ' +
+                'title="Download missing episodes from AniWorld">' +
+                '<div class="detailButton-content"><span class="material-icons detailButton-icon get_app" aria-hidden="true"></span></div>' +
+                '</button>');
+            button.setAttribute(MARK, '');
+            button.addEventListener('click', function () {
+                button.disabled = true;
+                toast('Looking it up on AniWorld…');
+                api('GET', 'FindSource?itemId=' + encodeURIComponent(id)).then(function (found) {
+                    if (found.url) {
+                        routeTo({ u: found.url, missing: '1' });
+                    } else {
+                        // No sure match: let the user pick from the search
+                        toast('Not sure which one it is, pick it from the search');
+                        routeTo({ q: found.query });
+                    }
+                }, function (err) {
+                    toast('AniWorld: ' + err.message);
+                }).then(function () {
+                    button.disabled = false;
+                });
+            });
+            // Before the ⋮ menu, which Jellyfin keeps last
+            var more = box.querySelector('.btnMoreCommands');
+            box.insertBefore(button, more && more.parentNode === box ? more : null);
+        }, function () { /* no plugin page reachable, no button */ });
+    }
+
+    // ------------------------------------------------------------------
     // Page
     // ------------------------------------------------------------------
     // The sticky download bar needs a solid background, or the episode list
@@ -1235,6 +1501,7 @@
             scheduled = false;
             addNavEntries();
             renderPage();
+            addSeriesButton();
         });
     }
 

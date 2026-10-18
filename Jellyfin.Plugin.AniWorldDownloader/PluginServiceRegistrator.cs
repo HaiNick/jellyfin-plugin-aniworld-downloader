@@ -19,5 +19,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddTransient<IStartupFilter, ScriptInjectionStartupFilter>();
         serviceCollection.AddSingleton<AniWorldClient>();
         serviceCollection.AddSingleton<LibraryMatcher>();
+        serviceCollection.AddSingleton<DownloadOwners>();
+        serviceCollection.AddHostedService<DownloadWatcher>();
     }
 }
