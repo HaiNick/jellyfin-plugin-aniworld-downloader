@@ -8,7 +8,7 @@ namespace Jellyfin.Plugin.AniWorldDownloader.Configuration;
 public class PluginConfiguration : BasePluginConfiguration
 {
     /// <summary>
-    /// Gets or sets the AniWorld Downloader base URL, for example http://192.168.178.168:8069.
+    /// Gets or sets the AniWorld Downloader base URL, for example http://192.168.1.10:8069.
     /// </summary>
     public string AniWorldUrl { get; set; } = string.Empty;
 

@@ -1,0 +1,71 @@
+# Tag a version (git tag -a v0.1.0.0 -m "what changed" && git push --tags) and
+# this builds the plugin, publishes it as a GitHub release, and adds it to
+# manifest.json so Jellyfin offers the update.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Read the version from the tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must look like v1.2.3.4, got $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The annotated tag's message is the changelog
+          git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > changelog.txt
+
+      # Jellyfin builds every plugin controller at startup; these tests catch
+      # what would otherwise stop the server from starting
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.AniWorldDownloader.Tests
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dotnet publish Jellyfin.Plugin.AniWorldDownloader -c Release -o artifacts \
+            -p:Version="$VERSION" -p:AssemblyVersion="$VERSION" -p:FileVersion="$VERSION"
+          zip -j "aniworld-downloader_${VERSION}.zip" artifacts/Jellyfin.Plugin.AniWorldDownloader.dll
+          md5sum "aniworld-downloader_${VERSION}.zip" | cut -d' ' -f1 > checksum.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "aniworld-downloader_${VERSION}.zip" \
+            --title "AniWorld Downloader $VERSION" --notes-file changelog.txt
+
+      - name: Add it to manifest.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/aniworld-downloader_${VERSION}.zip"
+          git fetch origin main
+          git checkout main
+          python3 .github/scripts/update_manifest.py manifest.json "$VERSION" "$url" "$(cat checksum.txt)" "$(cat changelog.txt)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "add $VERSION to manifest.json"
+          git push origin main

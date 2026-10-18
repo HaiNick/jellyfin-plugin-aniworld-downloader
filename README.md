@@ -84,8 +84,40 @@ The plugin page shows which script is running, for example
 Delete the override when you're done, or it keeps winning over newer
 built-in versions.
 
+## Install
+
+1. In Jellyfin, open **Dashboard → Plugins → Repositories** (the gear or
+   "Manage Repositories") and add:
+
+   ```
+   https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/manifest.json
+   ```
+
+2. Install **AniWorld Downloader** from the catalog and restart Jellyfin.
+3. Open the plugin's settings and enter the AniWorld Downloader URL (and an
+   API key with "Read and download" access if its login is on).
+
+Updates then show up in the catalog like any other plugin.
+
+## Releasing
+
+Tag a version; the changelog is the tag message:
+
+```sh
+git tag -a v0.2.0.0 -m "What changed"
+git push origin v0.2.0.0
+```
+
+The Release workflow runs the tests, builds the DLL, publishes
+`aniworld-downloader_<version>.zip` as a GitHub release and adds it with its
+MD5 checksum to `manifest.json`.
+
 ## Install by hand
 
 1. Copy `Jellyfin.Plugin.AniWorldDownloader.dll` into
-   `<jellyfin config>/plugins/AniWorldDownloader_0.0.1.0/`.
+   `<jellyfin config>/plugins/AniWorld Downloader_<version>/`.
 2. Restart Jellyfin.
+
+## License
+
+GPL-3.0, like the Jellyfin plugin template it is built from. See [LICENSE](LICENSE).
