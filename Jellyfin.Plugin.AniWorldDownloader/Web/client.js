@@ -1,16 +1,28 @@
 // AniWorld Downloader: adds an "AniWorld" entry next to Favorites in the
 // jellyfin-web top bar (wide screens) and side menu (phones), and renders the
-// plugin page at #/aniworld. Injected into index.html by the plugin.
+// plugin page at #/search?aniworld. Injected into index.html by the plugin.
+//
+// The page lives under /search because jellyfin-web only shows the side menu
+// button on its own user routes; on an unknown route phones get the library
+// list instead. The search page itself is hidden while ours is shown.
 (function () {
     'use strict';
 
-    var ROUTE = '#/aniworld';
+    var ROUTE = '#/search?aniworld';
     var LABEL = 'AniWorld';
     var MARK = 'data-aniworld-downloader';
+    var PAGE_ID = 'aniworldDownloaderPage';
     var FAVORITES_HREF = '#/home?tab=1';
 
+    // The tab title before our page took over, so it can be put back.
+    var previousTitle = null;
+
     function isOurRoute() {
-        return window.location.hash === ROUTE || window.location.hash.indexOf(ROUTE + '?') === 0;
+        var hash = window.location.hash;
+        var query = hash.indexOf('?');
+        return hash.slice(0, query < 0 ? hash.length : query) === '#/search'
+            && query >= 0
+            && new URLSearchParams(hash.slice(query + 1)).has('aniworld');
     }
 
     // The Material "Download" icon, drawn like the Favorites heart it replaces.
@@ -79,21 +91,63 @@
         });
     }
 
-    // jellyfin-web has no route for #/aniworld, so it shows its "page not found"
-    // page. Swap that page's content for ours.
+    // Shows our page next to jellyfin-web's search page and hides the search
+    // page; on any other route, removes ours and shows the search page again.
     function renderPage() {
+        var searchPage = document.getElementById('searchPage');
+        var page = document.getElementById(PAGE_ID);
+
         if (!isOurRoute()) {
+            if (page) {
+                page.remove();
+            }
+
+            if (searchPage && searchPage.hasAttribute(MARK)) {
+                searchPage.removeAttribute(MARK);
+                searchPage.style.display = '';
+            }
+
+            if (previousTitle !== null) {
+                if (document.title === LABEL) {
+                    document.title = previousTitle;
+                }
+
+                previousTitle = null;
+            }
+
             return;
         }
 
-        var pages = document.querySelectorAll('#fallbackPage');
-        var page = pages[pages.length - 1];
-        if (!page || page.hasAttribute(MARK)) {
+        if (!searchPage) {
             return;
         }
 
-        page.setAttribute(MARK, '');
-        document.title = LABEL;
+        if (!searchPage.hasAttribute(MARK)) {
+            searchPage.setAttribute(MARK, '');
+            searchPage.style.display = 'none';
+        }
+
+        if (previousTitle === null) {
+            previousTitle = document.title;
+        }
+
+        // Only when it differs: writing <title> would wake the observer again.
+        if (document.title !== LABEL) {
+            document.title = LABEL;
+        }
+
+        if (page && page.previousElementSibling === searchPage) {
+            return;
+        }
+
+        if (page) {
+            page.remove();
+        }
+
+        page = document.createElement('div');
+        page.id = PAGE_ID;
+        page.className = 'libraryPage noSecondaryNavPage';
+        searchPage.after(page);
         page.innerHTML =
             '<div class="padded-left padded-right padded-top">' +
             '<h1 class="sectionTitle">AniWorld Downloader</h1>' +

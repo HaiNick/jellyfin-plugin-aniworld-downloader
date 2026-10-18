@@ -13,7 +13,9 @@ entry next to Favorites and a hello-world page that shows the logged-in user.
   to jellyfin-web's `index.html` as it is served. Nothing on disk is changed,
   so Jellyfin image updates don't undo it.
 - `client.js` adds the **AniWorld** entry to the top bar (wide screens) and the
-  side menu (phones), and renders the plugin page at `#/aniworld`.
+  side menu (phones), and renders the plugin page at `#/search?aniworld`. It
+  lives under `/search` because jellyfin-web only shows the ☰ side-menu button
+  on its own user routes; the search page is hidden while the plugin page shows.
 - `GET /AniWorldDownloader/whoami` requires a logged-in Jellyfin user and
   returns the user's name and whether they are an admin.
 
