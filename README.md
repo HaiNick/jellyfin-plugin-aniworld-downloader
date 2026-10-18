@@ -8,8 +8,12 @@ right from Jellyfin, including the official Jellyfin Android and iOS apps.
 opens a search with the tabs All, Anime, Series and Movies. A title shows its
 seasons and episodes with their languages; pick a language and hoster, tick
 episodes and download. Tested in the web client and the official Android app.
-Still to come: "In library" badges on search results, the Auto-Sync switch
-and a queue view.
+
+Titles you already have get an **In library** badge and a link to the
+Jellyfin item; only libraries the user can see count. aniworld and s.to
+titles have a **Keep up to date with Auto-Sync** switch with a start point
+and schedule (when Auto-Sync is on in AniWorld Downloader). **Queue** shows
+the downloads with live progress, and users who may download can cancel.
 
 ## API
 
@@ -18,12 +22,13 @@ Everything is under `/AniWorldDownloader` and needs a Jellyfin login.
 | Endpoint | Who | What |
 |---|---|---|
 | `GET Info` | anyone | Set up yet? May this user download? Default picks |
-| `POST Search` `{Keyword, Type}` | anyone | All sites, aniworld first; Type: all, anime, series, movie |
-| `GET Series?url=` | anyone | Title, poster, description, genres |
+| `POST Search` `{Keyword, Type}` | anyone | All sites, aniworld first; Type: all, anime, series, movie. Hits already in the library carry `libraryItemId` |
+| `GET Series?url=` | anyone | Title, poster, description, genres, and `libraryItemId` when in the library |
 | `GET Seasons?url=` | anyone | Seasons |
 | `GET Episodes?url=&seriesUrl=` | anyone | Episodes with languages |
 | `GET Providers?url=` | anyone | Hosters per language |
 | `GET Queue?limit=&offset=&status=` | anyone | The download queue |
+| `POST Queue/{id}/Cancel` | may download | Cancel a queued or running download |
 | `POST Download` `{Episodes, Language, Provider, Title, SeriesUrl}` | may download | Queue episodes |
 | `GET/POST AutoSync/Tracked` | POST: may download | "Sync this with Auto-Sync" |
 | `GET Image?url=&sig=` | no login | Posters, only links the plugin signed |

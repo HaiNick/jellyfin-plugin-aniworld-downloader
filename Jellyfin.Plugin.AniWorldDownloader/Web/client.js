@@ -215,6 +215,25 @@
             '#' + PAGE_ID + ' .aniworld-card-title{margin-top:.4em;font-size:.95em;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}',
             '#' + PAGE_ID + ' .aniworld-badge{display:inline-block;padding:.1em .45em;margin:.3em .3em 0 0;border-radius:.25em;font-size:.75em;background:rgba(128,128,128,.25)}',
             '#' + PAGE_ID + ' .aniworld-badge-site{position:absolute;left:.4em;bottom:.4em;margin:0;background:rgba(0,0,0,.7);color:#fff}',
+            '#' + PAGE_ID + ' .aniworld-badge-library{position:absolute;right:.4em;top:.4em;margin:0;color:#fff;' +
+            'background:var(--aniworld-accent,#00a4dc)}',
+            '#' + PAGE_ID + ' .aniworld-titlebar{display:flex;align-items:center;justify-content:space-between;gap:1em}',
+            '#' + PAGE_ID + ' .aniworld-titlebar .emby-button{margin:0;min-height:2.75em}',
+            '#' + PAGE_ID + ' .aniworld-library-link{display:inline-block;margin-top:.75em;min-height:2.75em}',
+            '#' + PAGE_ID + ' .aniworld-sync{margin:1em 0;padding:.75em 1em;border-radius:.3em}',
+            '#' + PAGE_ID + ' .aniworld-sync-switch{display:flex;align-items:center;gap:.75em;min-height:2.75em;cursor:pointer}',
+            '#' + PAGE_ID + ' .aniworld-sync-switch input{width:1.35em;height:1.35em;margin:0;accent-color:var(--aniworld-accent,auto)}',
+            '#' + PAGE_ID + ' .aniworld-sync-fields{display:flex;flex-wrap:wrap;gap:1em;margin-top:.75em}',
+            '#' + PAGE_ID + ' .aniworld-sync-fields .inputContainer,#' + PAGE_ID + ' .aniworld-sync-fields .selectContainer' +
+            '{margin:0;min-width:7em;flex:1;max-width:14em}',
+            '#' + PAGE_ID + ' .aniworld-queue-item{display:flex;align-items:center;gap:1em;padding:.75em 1em}',
+            '#' + PAGE_ID + ' .aniworld-queue-item + .aniworld-queue-item{border-top:1px solid rgba(128,128,128,.2)}',
+            '#' + PAGE_ID + ' .aniworld-queue-text{flex:1;min-width:0}',
+            '#' + PAGE_ID + ' .aniworld-queue-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+            '#' + PAGE_ID + ' .aniworld-queue-sub{font-size:.85em;opacity:.75;margin-top:.2em}',
+            '#' + PAGE_ID + ' .aniworld-progress{height:.3em;border-radius:.15em;margin-top:.45em;background:rgba(128,128,128,.25);overflow:hidden}',
+            '#' + PAGE_ID + ' .aniworld-progress span{display:block;height:100%;background:var(--aniworld-accent,#00a4dc);transition:width .5s}',
+            '#' + PAGE_ID + ' .aniworld-queue-item .emby-button{margin:0;min-height:2.5em;flex:none}',
             '#' + PAGE_ID + ' .aniworld-head{display:flex;gap:1em;align-items:flex-start}',
             '#' + PAGE_ID + ' .aniworld-head .aniworld-poster{width:10em;flex:none}',
             '#' + PAGE_ID + ' .aniworld-head-text{flex:1;min-width:0}',
@@ -309,7 +328,8 @@
         var tab = params.get('t') || 'all';
 
         inner.innerHTML =
-            '<h1 class="sectionTitle">AniWorld</h1>' +
+            '<div class="aniworld-titlebar"><h1 class="sectionTitle">AniWorld</h1>' +
+            '<button type="button" class="raised emby-button aniworld-open-queue">Queue</button></div>' +
             '<form class="aniworld-searchbar">' +
             '<input type="search" class="emby-input" name="q" autocomplete="off" enterkeyhint="search" ' +
             'placeholder="Search anime, series and movies" aria-label="Search" value="' + escapeHtml(keyword) + '">' +
@@ -324,6 +344,10 @@
             '</div>' +
             '<div class="aniworld-status"></div>' +
             '<div class="aniworld-grid"></div>';
+
+        inner.querySelector('.aniworld-open-queue').addEventListener('click', function () {
+            routeTo({ view: 'queue' });
+        });
 
         var form = inner.querySelector('form');
         var input = form.querySelector('input');
@@ -383,6 +407,7 @@
                 '<div class="aniworld-poster">' +
                 '<div class="aniworld-poster-empty" aria-hidden="true">' + escapeHtml(item.title.charAt(0)) + '</div>' +
                 '<span class="aniworld-badge aniworld-badge-site">' + escapeHtml(siteName(item.site)) + '</span>' +
+                (item.libraryItemId ? '<span class="aniworld-badge aniworld-badge-library">In library</span>' : '') +
                 '</div>' +
                 '<div class="aniworld-card-title">' + escapeHtml(item.title) + '</div>' +
                 '</a>');
@@ -472,9 +497,11 @@
             '<div class="aniworld-poster"></div>' +
             '<div class="aniworld-head-text">' +
             '<h1>…</h1><div class="aniworld-meta"></div>' +
+            '<div class="aniworld-library"></div>' +
             '</div></div>' +
             '<p class="aniworld-description"></p>' +
             '<button type="button" class="aniworld-more" hidden>More</button>' +
+            '<div class="aniworld-sync paperList" hidden></div>' +
             '<div class="aniworld-pickers"></div>' +
             '<div class="aniworld-status">Loading…</div>' +
             '<div class="aniworld-episodes paperList"></div>' +
@@ -510,6 +537,17 @@
             if (series.poster_url) {
                 showPoster(inner.querySelector('.aniworld-head .aniworld-poster'), series.poster_url);
             }
+
+            if (series.libraryItemId) {
+                var serverId = window.ApiClient.serverId ? window.ApiClient.serverId() : '';
+                inner.querySelector('.aniworld-library').innerHTML =
+                    '<a class="raised emby-button aniworld-library-link" href="#/details?id=' +
+                    encodeURIComponent(series.libraryItemId) +
+                    (serverId ? '&serverId=' + encodeURIComponent(serverId) : '') +
+                    '">In your library: open</a>';
+            }
+
+            renderSync(inner, url, title, info, view);
         }, function (err) {
             if (isStale(view, inner)) {
                 return;
@@ -536,6 +574,239 @@
         }, function (err) {
             status.textContent = 'Could not load the seasons: ' + err.message;
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Auto-Sync switch
+    // ------------------------------------------------------------------
+    // AniWorld only syncs these two sites, see SYNC_SITES in its home.js
+    function canSync(url) {
+        try {
+            var host = new URL(url).hostname.replace(/^www\./, '');
+            return host === 'aniworld.to' || host === 'serienstream.to' || host === 's.to';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    var WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    function renderSync(inner, seriesUrl, title, info, view) {
+        var box = inner.querySelector('.aniworld-sync');
+        if (!info.canDownload || !canSync(seriesUrl)) {
+            return;
+        }
+
+        api('GET', 'AutoSync/Tracked?url=' + encodeURIComponent(seriesUrl)).then(function (state) {
+            if (isStale(view, inner)) {
+                return;
+            }
+
+            box.innerHTML =
+                '<label class="aniworld-sync-switch"><input type="checkbox" class="aniworld-sync-on">' +
+                '<span>Keep up to date with Auto-Sync</span></label>' +
+                '<div class="aniworld-sync-fields">' +
+                '<div class="inputContainer"><label class="inputLabel">From season</label>' +
+                '<input type="number" min="0" class="emby-input aniworld-sync-season"></div>' +
+                '<div class="inputContainer"><label class="inputLabel">From episode</label>' +
+                '<input type="number" min="1" class="emby-input aniworld-sync-episode"></div>' +
+                '<div class="selectContainer"><label class="selectLabel">When</label>' +
+                '<select class="emby-select-withcolor emby-select aniworld-sync-cadence">' +
+                '<option value="global">With the global schedule</option>' +
+                '<option value="daily">Every day</option>' +
+                '<option value="weekly">Every week</option></select></div>' +
+                '<div class="selectContainer aniworld-sync-weekday-box"><label class="selectLabel">Day</label>' +
+                '<select class="emby-select-withcolor emby-select aniworld-sync-weekday">' +
+                WEEKDAYS.map(function (day, i) { return '<option value="' + i + '">' + day + '</option>'; }).join('') +
+                '</select></div>' +
+                '<div class="inputContainer aniworld-sync-time-box"><label class="inputLabel">At</label>' +
+                '<input type="time" class="emby-input aniworld-sync-time"></div>' +
+                '</div>' +
+                '<div class="fieldDescription aniworld-sync-status"></div>';
+            box.hidden = false;
+
+            var on = box.querySelector('.aniworld-sync-on');
+            var season = box.querySelector('.aniworld-sync-season');
+            var episode = box.querySelector('.aniworld-sync-episode');
+            var cadence = box.querySelector('.aniworld-sync-cadence');
+            var weekday = box.querySelector('.aniworld-sync-weekday');
+            var time = box.querySelector('.aniworld-sync-time');
+            var status = box.querySelector('.aniworld-sync-status');
+
+            function fill(row) {
+                on.checked = Boolean(row);
+                season.value = row ? row.start_season : 1;
+                episode.value = row ? row.start_episode : 1;
+                cadence.value = row ? row.cadence : 'global';
+                weekday.value = row ? String(row.weekday) : '0';
+                time.value = row ? row.run_time : '22:00';
+                show(row);
+            }
+
+            function show(row) {
+                box.querySelector('.aniworld-sync-fields').style.display = on.checked ? '' : 'none';
+                box.querySelector('.aniworld-sync-weekday-box').style.display = cadence.value === 'weekly' ? '' : 'none';
+                box.querySelector('.aniworld-sync-time-box').style.display = cadence.value === 'global' ? 'none' : '';
+                var text = '';
+                if (on.checked && row) {
+                    text = 'Syncs in ' + row.language + (row.schedule ? ', ' + row.schedule.charAt(0).toLowerCase() + row.schedule.slice(1) : '');
+                    if (row.next_run) {
+                        text += '. Next check ' + new Date(row.next_run).toLocaleString() + '.';
+                    }
+                } else if (!on.checked) {
+                    text = 'New episodes download by themselves, in the language picked below.';
+                }
+                status.textContent = text;
+            }
+
+            function save() {
+                var language = inner.querySelector('.aniworld-language');
+                return api('POST', 'AutoSync/Tracked', {
+                    series_url: seriesUrl,
+                    title: title,
+                    tracked: true,
+                    language: (language && language.value) || info.defaultLanguage,
+                    start_season: Number(season.value || 1),
+                    start_episode: Number(episode.value || 1),
+                    cadence: cadence.value,
+                    weekday: Number(weekday.value),
+                    run_time: time.value || '22:00'
+                }).then(function (reply) {
+                    show(reply.series);
+                    return reply;
+                });
+            }
+
+            fill(state.tracked ? state.series : null);
+
+            on.addEventListener('change', function () {
+                show(null);
+                var request = on.checked
+                    ? save()
+                    : api('POST', 'AutoSync/Tracked', { series_url: seriesUrl, tracked: false });
+                request.then(function () {
+                    toast(on.checked ? 'Auto-Sync keeps ' + title + ' up to date' : title + ' is no longer synced');
+                }, function (err) {
+                    on.checked = !on.checked;
+                    show(null);
+                    toast('Auto-Sync: ' + err.message);
+                });
+            });
+
+            [season, episode, cadence, weekday, time].forEach(function (field) {
+                field.addEventListener('change', function () {
+                    show(null);
+                    if (on.checked) {
+                        save().catch(function (err) {
+                            toast('Auto-Sync: ' + err.message);
+                        });
+                    }
+                });
+            });
+        }, function () {
+            // 404 while Auto-Sync is off in AniWorld: no switch then
+            box.hidden = true;
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Queue view
+    // ------------------------------------------------------------------
+    var STATUS_LABELS = {
+        queued: 'Waiting',
+        running: 'Downloading',
+        completed: 'Done',
+        failed: 'Failed',
+        cancelled: 'Cancelled'
+    };
+
+    function renderQueue(inner, info) {
+        var view = renderedHash;
+        inner.innerHTML =
+            '<div class="aniworld-titlebar"><h1 class="sectionTitle">Queue</h1>' +
+            '<button type="button" class="raised emby-button aniworld-back">Search</button></div>' +
+            '<div class="aniworld-status">Loading…</div>' +
+            '<div class="aniworld-queue paperList"></div>';
+        setTitle('AniWorld queue');
+        inner.querySelector('.aniworld-back').addEventListener('click', function () {
+            routeTo({});
+        });
+
+        var status = inner.querySelector('.aniworld-status');
+        var list = inner.querySelector('.aniworld-queue');
+
+        function poll() {
+            if (isStale(view, inner)) {
+                return;
+            }
+
+            api('GET', 'Queue?limit=30').then(function (queue) {
+                if (isStale(view, inner)) {
+                    return;
+                }
+
+                draw(queue);
+            }, function (err) {
+                status.textContent = 'Could not load the queue: ' + err.message;
+            }).then(function () {
+                // Fast while something downloads, slow otherwise
+                var busy = list.querySelector('[data-status="running"],[data-status="queued"]');
+                window.setTimeout(poll, busy ? 2000 : 10000);
+            });
+        }
+
+        function draw(queue) {
+            var items = queue.items || [];
+            var ffmpeg = queue.ffmpeg_progress || {};
+            status.textContent = items.length ? '' : 'Nothing in the queue.';
+            list.innerHTML = items.map(function (item) {
+                var label = STATUS_LABELS[item.status] || item.status;
+                var parts = [label];
+                if (item.total_episodes) {
+                    parts.push(item.status === 'running'
+                        ? 'episode ' + Math.max(1, item.current_episode) + ' of ' + item.total_episodes
+                        : item.total_episodes + (item.total_episodes === 1 ? ' episode' : ' episodes'));
+                }
+                parts.push(item.language);
+                if (item.provider) {
+                    parts.push(item.provider);
+                }
+
+                var progress = '';
+                if (item.status === 'running') {
+                    var percent = ffmpeg.active ? Number(ffmpeg.percent) || 0 : 0;
+                    var done = item.total_episodes ? (Math.max(0, item.current_episode - 1) + percent / 100) / item.total_episodes : 0;
+                    progress = '<div class="aniworld-progress"><span style="width:' + Math.round(done * 100) + '%"></span></div>';
+                    if (ffmpeg.active && ffmpeg.speed) {
+                        parts.push(Math.round(percent) + '% at ' + ffmpeg.speed);
+                    }
+                }
+
+                var cancel = info.canDownload && (item.status === 'queued' || item.status === 'running')
+                    ? '<button type="button" class="raised emby-button aniworld-cancel" data-id="' + item.id + '">Cancel</button>'
+                    : '';
+
+                return '<div class="aniworld-queue-item" data-status="' + escapeHtml(item.status) + '">' +
+                    '<div class="aniworld-queue-text">' +
+                    '<div class="aniworld-queue-title">' + escapeHtml(item.title) + '</div>' +
+                    '<div class="aniworld-queue-sub">' + escapeHtml(parts.join(' · ')) + '</div>' +
+                    progress + '</div>' + cancel + '</div>';
+            }).join('');
+
+            list.querySelectorAll('.aniworld-cancel').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    button.disabled = true;
+                    api('POST', 'Queue/' + button.getAttribute('data-id') + '/Cancel').then(function () {
+                        toast('Cancelled');
+                    }, function (err) {
+                        button.disabled = false;
+                        toast('Cancel failed: ' + err.message);
+                    });
+                });
+            });
+        }
+
+        poll();
     }
 
     function seasonLabel(season) {
@@ -917,7 +1188,9 @@
                 return;
             }
 
-            if (params.get('u')) {
+            if (params.get('view') === 'queue') {
+                renderQueue(inner, info);
+            } else if (params.get('u')) {
                 renderDetail(inner, params, info);
             } else {
                 renderSearch(inner, params, info);

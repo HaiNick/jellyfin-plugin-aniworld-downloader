@@ -1,8 +1,10 @@
 using System.Net.Mime;
 using System.Text.Json.Nodes;
 using Jellyfin.Data;
+using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.AniWorldDownloader.AniWorld;
+using Jellyfin.Plugin.AniWorldDownloader.Library;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -24,16 +26,19 @@ public class AniWorldProxyController : ControllerBase
 
     private readonly IAuthorizationContext _authContext;
     private readonly AniWorldClient _aniWorld;
+    private readonly LibraryMatcher _library;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniWorldProxyController"/> class.
     /// </summary>
     /// <param name="authContext">The authorization context.</param>
     /// <param name="aniWorld">The AniWorld Downloader client.</param>
-    public AniWorldProxyController(IAuthorizationContext authContext, AniWorldClient aniWorld)
+    /// <param name="library">Matches titles against the Jellyfin library.</param>
+    public AniWorldProxyController(IAuthorizationContext authContext, AniWorldClient aniWorld, LibraryMatcher library)
     {
         _authContext = authContext;
         _aniWorld = aniWorld;
+        _library = library;
     }
 
     /// <summary>
@@ -86,19 +91,43 @@ public class AniWorldProxyController : ControllerBase
         }
 
         var body = new JsonObject { ["keyword"] = keyword, ["site"] = "all", ["type"] = type };
-        return Reply(await _aniWorld.SendAsync(HttpMethod.Post, "search", null, body, cancellationToken).ConfigureAwait(false));
+        var reply = await _aniWorld.SendAsync(HttpMethod.Post, "search", null, body, cancellationToken).ConfigureAwait(false);
+        if (reply.Json?["results"] is JsonArray results && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        {
+            foreach (var result in results.OfType<JsonObject>())
+            {
+                MarkLibraryItem(result, caller);
+            }
+        }
+
+        return Reply(reply);
     }
 
     /// <summary>
-    /// Title, poster, description and genres of a series or movie.
+    /// Title, poster, description and genres of a series or movie, and the
+    /// Jellyfin item when it is already in the library.
     /// </summary>
     /// <param name="url">The series page on its site.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The details.</returns>
     [HttpGet("Series")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public Task<ActionResult> GetSeries([FromQuery] string url, CancellationToken cancellationToken)
-        => ForwardGet("series", new() { ["url"] = url }, cancellationToken);
+    public async Task<ActionResult> GetSeries([FromQuery] string url, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return BadRequest(new JsonObject { ["error"] = "url is required" });
+        }
+
+        var query = new Dictionary<string, string?> { ["url"] = url };
+        var reply = await _aniWorld.SendAsync(HttpMethod.Get, "series", query, null, cancellationToken).ConfigureAwait(false);
+        if (reply.Json is JsonObject series && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        {
+            MarkLibraryItem(series, caller);
+        }
+
+        return Reply(reply);
+    }
 
     /// <summary>
     /// The seasons of a series.
@@ -154,6 +183,25 @@ public class AniWorldProxyController : ControllerBase
             new() { ["limit"] = limit?.ToString(), ["offset"] = offset?.ToString(), ["status"] = status },
             cancellationToken,
             requireUrl: false);
+
+    /// <summary>
+    /// Cancels a queued or running download. Needs the download permission.
+    /// </summary>
+    /// <param name="id">The queue item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply.</returns>
+    [HttpPost("Queue/{id:int}/Cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> CancelQueueItem([FromRoute] int id, CancellationToken cancellationToken)
+    {
+        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
+        {
+            return denied;
+        }
+
+        return Reply(await _aniWorld.SendAsync(HttpMethod.Post, $"queue/{id}/cancel", null, null, cancellationToken).ConfigureAwait(false));
+    }
 
     /// <summary>
     /// Queues episodes for download. Needs the download permission.
@@ -329,10 +377,21 @@ public class AniWorldProxyController : ControllerBase
 
         var isAdmin = auth.User.HasPermission(PermissionKind.IsAdministrator);
         var allowed = Plugin.Instance!.Configuration.DownloadUserIds;
-        return new Caller(isAdmin, isAdmin || allowed.Contains(auth.User.Id));
+        return new Caller(auth.User, isAdmin, isAdmin || allowed.Contains(auth.User.Id));
     }
 
-    private sealed record Caller(bool IsAdmin, bool CanDownload);
+    // Adds "libraryItemId" to a result or title the caller already has in a
+    // library they can see, so the UI can badge it and link to it
+    private void MarkLibraryItem(JsonObject item, Caller caller)
+    {
+        var title = item["title"] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+        if (_library.Find(caller.User, title) is { } id)
+        {
+            item["libraryItemId"] = id.ToString("N");
+        }
+    }
+
+    private sealed record Caller(User User, bool IsAdmin, bool CanDownload);
 }
 
 /// <summary>
