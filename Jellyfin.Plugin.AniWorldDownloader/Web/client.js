@@ -223,9 +223,15 @@
             '#' + PAGE_ID + ' .aniworld-sync{margin:1em 0;padding:.75em 1em;border-radius:.3em}',
             '#' + PAGE_ID + ' .aniworld-sync-switch{display:flex;align-items:center;gap:.75em;min-height:2.75em;cursor:pointer}',
             '#' + PAGE_ID + ' .aniworld-sync-switch input{width:1.35em;height:1.35em;margin:0;accent-color:var(--aniworld-accent,auto)}',
-            '#' + PAGE_ID + ' .aniworld-sync-fields{display:flex;flex-wrap:wrap;gap:1em;margin-top:.75em}',
-            '#' + PAGE_ID + ' .aniworld-sync-fields .inputContainer,#' + PAGE_ID + ' .aniworld-sync-fields .selectContainer' +
-            '{margin:0;min-width:7em;flex:1;max-width:14em}',
+            // Season and episode side by side, the schedule picker on a row of its
+            // own so it isn't cut off on a phone, then day and time
+            '#' + PAGE_ID + ' .aniworld-sync-fields{display:grid;grid-template-columns:1fr 1fr;gap:.75em 1em;margin-top:.75em;max-width:32em}',
+            '#' + PAGE_ID + ' .aniworld-sync-fields > div{margin:0;min-width:0}',
+            '#' + PAGE_ID + ' .aniworld-sync-fields .aniworld-sync-cadence-box{grid-column:1 / -1}',
+            '#' + PAGE_ID + ' .aniworld-sync-fields label{display:block;margin-bottom:.3em;white-space:nowrap}',
+            // Inside the panel the fields would have the panel's own colour; give them an edge
+            '#' + PAGE_ID + ' .aniworld-sync .emby-input,#' + PAGE_ID + ' .aniworld-sync .emby-select{width:100%;box-sizing:border-box;' +
+            'border:1px solid rgba(128,128,128,.4);border-radius:.2em;padding:.5em .6em;background:rgba(0,0,0,.15);color:inherit;font:inherit}',
             '#' + PAGE_ID + ' .aniworld-queue-item{display:flex;align-items:center;gap:1em;padding:.75em 1em}',
             '#' + PAGE_ID + ' .aniworld-queue-item + .aniworld-queue-item{border-top:1px solid rgba(128,128,128,.2)}',
             '#' + PAGE_ID + ' .aniworld-queue-text{flex:1;min-width:0}',
@@ -326,6 +332,8 @@
     function renderSearch(inner, params, info) {
         var keyword = params.get('q') || '';
         var tab = params.get('t') || 'all';
+        // Only titles already in a Jellyfin library, see LibraryMatcher
+        var onlyLibrary = params.get('lib') === '1';
 
         inner.innerHTML =
             '<div class="aniworld-titlebar"><h1 class="sectionTitle">AniWorld</h1>' +
@@ -341,6 +349,10 @@
                 return '<button type="button" role="tab" aria-selected="' + active + '" data-tab="' + t.id + '" ' +
                     'class="raised emby-button' + (active ? ' button-submit' : '') + '">' + t.label + '</button>';
             }).join('') +
+            // A filter on top of the tab, not a tab of its own
+            '<button type="button" aria-pressed="' + onlyLibrary + '" ' +
+            'class="raised emby-button aniworld-only-library' + (onlyLibrary ? ' button-submit' : '') + '">' +
+            (onlyLibrary ? '✓ ' : '') + 'In library</button>' +
             '</div>' +
             '<div class="aniworld-status"></div>' +
             '<div class="aniworld-grid"></div>';
@@ -356,14 +368,18 @@
             input.blur();
             var value = input.value.trim();
             if (value) {
-                routeTo({ q: value, t: tab });
+                routeTo({ q: value, t: tab, lib: onlyLibrary ? '1' : '' });
             }
         });
 
         inner.querySelectorAll('[data-tab]').forEach(function (button) {
             button.addEventListener('click', function () {
-                routeTo({ q: input.value.trim() || keyword, t: button.getAttribute('data-tab') }, true);
+                routeTo({ q: input.value.trim() || keyword, t: button.getAttribute('data-tab'), lib: onlyLibrary ? '1' : '' }, true);
             });
+        });
+
+        inner.querySelector('.aniworld-only-library').addEventListener('click', function () {
+            routeTo({ q: input.value.trim() || keyword, t: tab, lib: onlyLibrary ? '' : '1' }, true);
         });
 
         var status = inner.querySelector('.aniworld-status');
@@ -392,8 +408,15 @@
             }
 
             var results = reply.results || [];
-            status.textContent = results.length ? '' : 'Nothing found for “' + keyword + '”.';
-            renderResults(inner.querySelector('.aniworld-grid'), results, params);
+            var shown = onlyLibrary ? results.filter(function (r) { return r.libraryItemId; }) : results;
+            if (!results.length) {
+                status.textContent = 'Nothing found for “' + keyword + '”.';
+            } else if (!shown.length) {
+                status.textContent = 'None of the ' + results.length + ' results for “' + keyword + '” are in your library.';
+            } else {
+                status.textContent = onlyLibrary ? shown.length + ' of ' + results.length + ' results are in your library.' : '';
+            }
+            renderResults(inner.querySelector('.aniworld-grid'), shown, params);
         }, function (err) {
             status.textContent = 'Search failed: ' + err.message;
         });
@@ -412,7 +435,7 @@
                 '<div class="aniworld-card-title">' + escapeHtml(item.title) + '</div>' +
                 '</a>');
             card.addEventListener('click', function () {
-                routeTo({ q: params.get('q'), t: params.get('t'), u: item.url });
+                routeTo({ q: params.get('q'), t: params.get('t'), lib: params.get('lib'), u: item.url });
             });
             grid.appendChild(card);
 
@@ -606,20 +629,20 @@
                 '<label class="aniworld-sync-switch"><input type="checkbox" class="aniworld-sync-on">' +
                 '<span>Keep up to date with Auto-Sync</span></label>' +
                 '<div class="aniworld-sync-fields">' +
-                '<div class="inputContainer"><label class="inputLabel">From season</label>' +
+                '<div><label class="inputLabel">From season</label>' +
                 '<input type="number" min="0" class="emby-input aniworld-sync-season"></div>' +
-                '<div class="inputContainer"><label class="inputLabel">From episode</label>' +
+                '<div><label class="inputLabel">From episode</label>' +
                 '<input type="number" min="1" class="emby-input aniworld-sync-episode"></div>' +
-                '<div class="selectContainer"><label class="selectLabel">When</label>' +
+                '<div class="aniworld-sync-cadence-box"><label class="selectLabel">When</label>' +
                 '<select class="emby-select-withcolor emby-select aniworld-sync-cadence">' +
                 '<option value="global">With the global schedule</option>' +
                 '<option value="daily">Every day</option>' +
                 '<option value="weekly">Every week</option></select></div>' +
-                '<div class="selectContainer aniworld-sync-weekday-box"><label class="selectLabel">Day</label>' +
+                '<div class="aniworld-sync-weekday-box"><label class="selectLabel">Day</label>' +
                 '<select class="emby-select-withcolor emby-select aniworld-sync-weekday">' +
                 WEEKDAYS.map(function (day, i) { return '<option value="' + i + '">' + day + '</option>'; }).join('') +
                 '</select></div>' +
-                '<div class="inputContainer aniworld-sync-time-box"><label class="inputLabel">At</label>' +
+                '<div class="aniworld-sync-time-box"><label class="inputLabel">At</label>' +
                 '<input type="time" class="emby-input aniworld-sync-time"></div>' +
                 '</div>' +
                 '<div class="fieldDescription aniworld-sync-status"></div>';
