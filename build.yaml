@@ -1,0 +1,16 @@
+---
+name: "AniWorld Downloader"
+guid: "31b711c1-95e5-4481-b7cc-3e43b0476b6d"
+version: "0.0.1.0"
+targetAbi: "12.2.0.0"
+framework: "net10.0"
+overview: "Search for and download anime, series and movies through AniWorld Downloader"
+description: >
+  Adds an AniWorld tab to the Jellyfin web client and the official Android
+  and iOS apps, which searches AniWorld Downloader and queues downloads.
+category: "General"
+owner: "HaiNick"
+artifacts:
+- "Jellyfin.Plugin.AniWorldDownloader.dll"
+changelog: >
+  Milestone 0 spike: hello-world tab and whoami endpoint.
