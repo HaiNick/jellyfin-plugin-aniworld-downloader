@@ -31,7 +31,13 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          # The annotated tag's message is the changelog
+          # The annotated tag's message is the changelog. actions/checkout
+          # leaves a plain tag without the message behind, so fetch the real one.
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" != "tag" ]; then
+            echo "Use an annotated tag (git tag -a), its message is the changelog" >&2
+            exit 1
+          fi
           git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents)' > changelog.txt
 
       # Jellyfin builds every plugin controller at startup; these tests catch
@@ -53,8 +59,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "aniworld-downloader_${VERSION}.zip" \
-            --title "AniWorld Downloader $VERSION" --notes-file changelog.txt
+          zip="aniworld-downloader_${VERSION}.zip"
+          # Re-running a release replaces its zip and notes instead of failing
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file changelog.txt
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip" \
+              --title "AniWorld Downloader $VERSION" --notes-file changelog.txt
+          fi
 
       - name: Add it to manifest.json
         env:
@@ -67,5 +80,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add manifest.json
-          git commit -m "add $VERSION to manifest.json"
-          git push origin main
+          if git diff --cached --quiet; then
+            echo "manifest.json already up to date"
+          else
+            git commit -m "add $VERSION to manifest.json"
+            git push origin main
+          fi

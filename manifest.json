@@ -9,11 +9,11 @@
     "versions": [
       {
         "version": "0.1.0.0",
-        "changelog": "release through GitHub and Jellyfin's plugin catalog\n\nPushing a tag like v0.1.0.0 runs the tests, builds the DLL, publishes it\nas a GitHub release zip and adds that version with its MD5 checksum to\nmanifest.json, which Jellyfin reads as a plugin repository. The tag's\nmessage becomes the changelog.\n\nThe version is now 0.1.0.0, the settings page shows a generic example\naddress, and the repo is licensed GPL-3.0 like the plugin template.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+        "changelog": "First release: search anime, series and movies on every site from inside Jellyfin, download episodes, see what is already in your library, keep series up to date with Auto-Sync and follow the queue.",
         "targetAbi": "12.2.0.0",
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/v0.1.0.0/aniworld-downloader_0.1.0.0.zip",
         "checksum": "6e192fe9b41d53599bdc298aa5619a84",
-        "timestamp": "2026-10-18T18:22:53Z"
+        "timestamp": "2026-10-18T18:23:49Z"
       }
     ]
   }
