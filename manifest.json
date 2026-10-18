@@ -1,0 +1,20 @@
+[
+  {
+    "guid": "31b711c1-95e5-4481-b7cc-3e43b0476b6d",
+    "name": "AniWorld Downloader",
+    "overview": "Search for and download anime, series and movies through AniWorld Downloader",
+    "description": "Adds an AniWorld page to the Jellyfin web client and the official Android and iOS apps. It searches AniWorld Downloader, queues downloads into your libraries and can keep series up to date with Auto-Sync.",
+    "owner": "HaiNick",
+    "category": "General",
+    "versions": [
+      {
+        "version": "0.1.0.0",
+        "changelog": "release through GitHub and Jellyfin's plugin catalog\n\nPushing a tag like v0.1.0.0 runs the tests, builds the DLL, publishes it\nas a GitHub release zip and adds that version with its MD5 checksum to\nmanifest.json, which Jellyfin reads as a plugin repository. The tag's\nmessage becomes the changelog.\n\nThe version is now 0.1.0.0, the settings page shows a generic example\naddress, and the repo is licensed GPL-3.0 like the plugin template.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/v0.1.0.0/aniworld-downloader_0.1.0.0.zip",
+        "checksum": "6e192fe9b41d53599bdc298aa5619a84",
+        "timestamp": "2026-10-18T18:22:53Z"
+      }
+    ]
+  }
+]
