@@ -1,6 +1,8 @@
 using System.Net.Mime;
+using System.Text.Json;
 using Jellyfin.Data;
 using Jellyfin.Database.Implementations.Enums;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -16,35 +18,59 @@ namespace Jellyfin.Plugin.AniWorldDownloader.Api;
 public class AniWorldDownloaderController : ControllerBase
 {
     private readonly IAuthorizationContext _authContext;
+    private readonly IApplicationPaths _applicationPaths;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniWorldDownloaderController"/> class.
     /// </summary>
     /// <param name="authContext">The authorization context.</param>
-    public AniWorldDownloaderController(IAuthorizationContext authContext)
+    /// <param name="applicationPaths">The server's paths.</param>
+    public AniWorldDownloaderController(IAuthorizationContext authContext, IApplicationPaths applicationPaths)
     {
         _authContext = authContext;
+        _applicationPaths = applicationPaths;
     }
 
     /// <summary>
     /// Serves the script that adds the AniWorld tab to the web client.
     /// Anonymous, because index.html loads it before anyone logs in.
     /// </summary>
+    /// <remarks>
+    /// A client.js in the plugin's configuration folder wins over the built-in
+    /// one, so the UI can be changed without restarting Jellyfin. The script
+    /// is prefixed with where it came from, which the page shows.
+    /// </remarks>
     /// <returns>The script.</returns>
     [HttpGet("client.js")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult GetClientScript()
+    public async Task<ActionResult> GetClientScript()
     {
-        var stream = GetType().Assembly.GetManifestResourceStream("Jellyfin.Plugin.AniWorldDownloader.Web.client.js");
-        if (stream is null)
+        string script;
+        string build;
+        var overridePath = Path.Combine(_applicationPaths.PluginConfigurationsPath, "AniWorldDownloader", "client.js");
+        if (System.IO.File.Exists(overridePath))
         {
-            return NotFound();
+            script = await System.IO.File.ReadAllTextAsync(overridePath).ConfigureAwait(false);
+            build = $"override {System.IO.File.GetLastWriteTimeUtc(overridePath):yyyy-MM-dd HH:mm:ss} UTC";
+        }
+        else
+        {
+            var stream = GetType().Assembly.GetManifestResourceStream("Jellyfin.Plugin.AniWorldDownloader.Web.client.js");
+            if (stream is null)
+            {
+                return NotFound();
+            }
+
+            using var reader = new StreamReader(stream);
+            script = await reader.ReadToEndAsync().ConfigureAwait(false);
+            build = $"built-in {GetType().Assembly.GetName().Version}";
         }
 
         Response.Headers.CacheControl = "no-cache";
-        return File(stream, "application/javascript; charset=utf-8");
+        var prefix = $"window.AniWorldDownloaderBuild = {JsonSerializer.Serialize(build)};\n";
+        return Content(prefix + script, "application/javascript; charset=utf-8");
     }
 
     /// <summary>

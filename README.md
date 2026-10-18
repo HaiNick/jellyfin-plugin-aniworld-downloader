@@ -37,6 +37,18 @@ docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
   dotnet publish Jellyfin.Plugin.AniWorldDownloader -c Release -o /src/artifacts
 ```
 
+## Changing the UI without restarting Jellyfin
+
+The plugin serves `client.js` from
+`<jellyfin config>/plugins/configurations/AniWorldDownloader/client.js` when
+that file exists, and its built-in copy otherwise. Copy a new version there,
+then reload the web client (on Android: close the app and open it again).
+
+The plugin page shows which script is running, for example
+`client.js: built-in 0.0.1.0` or `client.js: override 2026-10-18 17:12:44 UTC`.
+Delete the override when you're done, or it keeps winning over newer
+built-in versions.
+
 ## Install by hand
 
 1. Copy `Jellyfin.Plugin.AniWorldDownloader.dll` into

@@ -154,7 +154,9 @@
             '<p>Hello world from the plugin. If you can read this, the page works here.</p>' +
             '<div class="paperList" style="padding:1em;max-width:40em">' +
             '<div id="aniworld-whoami">Asking the server who you are…</div>' +
-            '</div></div>';
+            '</div>' +
+            '<p class="fieldDescription">client.js: ' + escapeHtml(window.AniWorldDownloaderBuild || 'unknown') + '</p>' +
+            '</div>';
 
         apiGet('AniWorldDownloader/whoami').then(function (me) {
             page.querySelector('#aniworld-whoami').innerHTML =
