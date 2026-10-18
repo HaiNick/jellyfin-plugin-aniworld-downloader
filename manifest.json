@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.1.1.0",
+        "changelog": "Search results can be filtered to what is already in your library, and the Auto-Sync settings on a title fit on a phone.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/v0.1.1.0/aniworld-downloader_0.1.1.0.zip",
+        "checksum": "ff364b8dda7a709c2820b0cf5abe160c",
+        "timestamp": "2026-10-18T18:57:07Z"
+      },
+      {
         "version": "0.1.0.0",
         "changelog": "First release: search anime, series and movies on every site from inside Jellyfin, download episodes, see what is already in your library, keep series up to date with Auto-Sync and follow the queue.",
         "targetAbi": "12.2.0.0",
