@@ -4,10 +4,12 @@ A Jellyfin plugin for searching and downloading anime, series and movies
 through [AniWorld Downloader](https://github.com/HaiNick/AniWorld-Downloader),
 right from Jellyfin, including the official Jellyfin Android and iOS apps.
 
-**Status:** milestone 2. The backend is done: a settings page, and an API
-that passes search, details, downloads, the queue, Auto-Sync and posters on
-to AniWorld Downloader. The **AniWorld** page itself is still a placeholder;
-the search and download UI is milestone 3.
+**Status:** milestone 3. The **AniWorld** entry (top bar, or ☰ on phones)
+opens a search with the tabs All, Anime, Series and Movies. A title shows its
+seasons and episodes with their languages; pick a language and hoster, tick
+episodes and download. Tested in the web client and the official Android app.
+Still to come: "In library" badges on search results, the Auto-Sync switch
+and a queue view.
 
 ## API
 

@@ -180,8 +180,10 @@ public class AniWorldProxyController : ControllerBase
         var body = new JsonObject
         {
             ["episodes"] = new JsonArray(request.Episodes.Select(e => (JsonNode?)JsonValue.Create(e)).ToArray()),
-            ["language"] = Pick(request.Language, config.DefaultLanguage),
-            ["provider"] = Pick(request.Provider, config.DefaultProvider),
+            // Only a missing value gets the default: some sites have no hoster
+            // to pick, and AniWorld expects an empty one for them
+            ["language"] = request.Language ?? config.DefaultLanguage,
+            ["provider"] = request.Provider ?? config.DefaultProvider,
             ["title"] = Pick(request.Title, "Unknown"),
             ["series_url"] = request.SeriesUrl ?? string.Empty,
         };
@@ -360,12 +362,12 @@ public class DownloadRequest
     public string[]? Episodes { get; set; }
 
     /// <summary>
-    /// Gets or sets the language; the default one when empty.
+    /// Gets or sets the language; the default one when missing.
     /// </summary>
     public string? Language { get; set; }
 
     /// <summary>
-    /// Gets or sets the hoster; the default one when empty.
+    /// Gets or sets the hoster; the default one when missing.
     /// </summary>
     public string? Provider { get; set; }
 
