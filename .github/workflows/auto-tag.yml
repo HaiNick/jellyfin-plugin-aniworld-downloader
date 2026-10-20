@@ -1,0 +1,67 @@
+# Merging a version bump into main releases it: when build.yaml names a
+# version that has no tag yet, this tags it and runs release.yml. The tag
+# message, and so the changelog, lists the commits since the last tag.
+name: Auto tag
+
+on:
+  push:
+    branches: [main]
+    paths: [build.yaml, .github/workflows/auto-tag.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag the version in build.yaml
+        id: tag
+        run: |
+          version="$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' build.yaml)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "build.yaml must have a version like 1.2.3.4, got '$version'" >&2
+            exit 1
+          fi
+          project=Jellyfin.Plugin.AniWorldDownloader/Jellyfin.Plugin.AniWorldDownloader.csproj
+          if ! grep -q "<Version>$version</Version>" "$project"; then
+            echo "build.yaml says $version but $project doesn't; bump both" >&2
+            exit 1
+          fi
+
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists, nothing to release"
+            exit 0
+          fi
+
+          # Everything since the last release, minus the manifest commits
+          # and the version bump itself
+          previous="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          git log --no-merges --format='- %s' ${previous:+"$previous..HEAD"} \
+            | grep -v -e 'to manifest\.json$' -e '^- bump the version' > changelog.txt || true
+          if [ ! -s changelog.txt ]; then
+            echo "- Version $version" > changelog.txt
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -F changelog.txt
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
