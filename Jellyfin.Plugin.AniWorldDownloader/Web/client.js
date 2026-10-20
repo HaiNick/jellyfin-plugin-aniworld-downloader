@@ -172,6 +172,21 @@
         return SITE_NAMES[site] || site;
     }
 
+    // Links out to the title's own page on its site. Only http(s), since the
+    // URL comes from AniWorld's replies.
+    function externalHref(url) {
+        try {
+            var parsed = new URL(url);
+            return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // The Material "Open in new" icon
+    var EXTERNAL_ICON = '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false">' +
+        '<path fill="currentColor" d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3z"/></svg>';
+
     var toastTimer = null;
     function toast(message) {
         var box = document.getElementById('aniworldToast');
@@ -226,6 +241,9 @@
             '#' + PAGE_ID + ' .aniworld-titlebar{display:flex;align-items:center;justify-content:space-between;gap:1em}',
             '#' + PAGE_ID + ' .aniworld-titlebar .emby-button{margin:0;min-height:2.75em}',
             '#' + PAGE_ID + ' .aniworld-library-link{display:inline-block;margin-top:.75em;min-height:2.75em}',
+            '#' + PAGE_ID + ' .aniworld-links{display:flex;flex-wrap:wrap;gap:.5em;align-items:center}',
+            '#' + PAGE_ID + ' .aniworld-site-link{display:inline-flex;align-items:center;gap:.4em;margin-top:.75em;min-height:2.75em;' +
+            'color:inherit;opacity:.85}',
             '#' + PAGE_ID + ' .aniworld-sync{margin:1em 0;padding:.75em 1em;border-radius:.3em}',
             '#' + PAGE_ID + ' .aniworld-sync-switch{display:flex;align-items:center;gap:.75em;min-height:2.75em;cursor:pointer}',
             '#' + PAGE_ID + ' .aniworld-sync-switch input{width:1.35em;height:1.35em;margin:0;accent-color:var(--aniworld-accent,auto)}',
@@ -267,6 +285,9 @@
             'accent-color:var(--aniworld-accent,auto)}',
             '#' + PAGE_ID + ' .aniworld-episode-text{flex:1;min-width:0}',
             '#' + PAGE_ID + ' .aniworld-episode-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+            // Big enough to tap on a phone without hitting the checkbox row
+            '#' + PAGE_ID + ' .aniworld-episode-link{flex:none;display:flex;align-items:center;justify-content:center;' +
+            'width:2.75em;height:2.75em;margin:-.5em -.5em -.5em 0;color:inherit;opacity:.7;font-size:1.2em}',
             '#' + PAGE_ID + ' .aniworld-actions{display:flex;flex-wrap:wrap;gap:.75em;position:sticky;bottom:0;padding:.75em 0;z-index:2;' +
             'background:var(--aniworld-page-background,#101010)}',
             '#' + PAGE_ID + ' .aniworld-actions .emby-button{margin:0;flex:1;min-width:12em;min-height:3em}',
@@ -692,7 +713,7 @@
             '<div class="aniworld-poster"></div>' +
             '<div class="aniworld-head-text">' +
             '<h1>…</h1><div class="aniworld-meta"></div>' +
-            '<div class="aniworld-library"></div>' +
+            '<div class="aniworld-links"><span class="aniworld-library"></span><span class="aniworld-site"></span></div>' +
             '</div></div>' +
             '<p class="aniworld-description"></p>' +
             '<button type="button" class="aniworld-more" hidden>More</button>' +
@@ -740,6 +761,14 @@
                     encodeURIComponent(series.libraryItemId) +
                     (serverId ? '&serverId=' + encodeURIComponent(serverId) : '') +
                     '">In your library: open</a>';
+            }
+
+            var siteHref = externalHref(url);
+            if (siteHref) {
+                inner.querySelector('.aniworld-site').innerHTML =
+                    '<a class="aniworld-site-link" href="' + escapeHtml(siteHref) +
+                    '" target="_blank" rel="noopener noreferrer">' +
+                    escapeHtml('Open on ' + siteName(siteFromUrl(url))) + EXTERNAL_ICON + '</a>';
             }
 
             renderSync(inner, url, title, info, view);
@@ -1102,6 +1131,7 @@
         var self = this;
         var list = this.inner.querySelector('.aniworld-episodes');
         var single = this.episodes.length === 1;
+        var site = siteName(siteFromUrl(this.seriesUrl));
         list.innerHTML = this.episodes.map(function (ep, i) {
             var name = ep.title_de || ep.title_en || '';
             var heading = self.season.are_movies
@@ -1114,13 +1144,21 @@
                 badges += '<span class="aniworld-badge">✓ In library</span>';
             }
 
+            var href = externalHref(ep.url);
+            // A link inside a label opens the link and leaves the checkbox alone
+            var link = href
+                ? '<a class="aniworld-episode-link" href="' + escapeHtml(href) +
+                '" target="_blank" rel="noopener noreferrer" title="Open on ' + escapeHtml(site) +
+                '" aria-label="' + escapeHtml(heading + ': open on ' + site) + '">' + EXTERNAL_ICON + '</a>'
+                : '';
+
             return '<label class="aniworld-episode listItem">' +
                 '<input type="checkbox" data-index="' + i + '"' +
                 ((self.tickMissing ? !ep.downloaded : single) ? ' checked' : '') + '>' +
                 '<div class="aniworld-episode-text">' +
                 '<div class="aniworld-episode-title">' + escapeHtml(heading) + '</div>' +
                 '<div>' + badges + '</div>' +
-                '</div></label>';
+                '</div>' + link + '</label>';
         }).join('');
 
         list.querySelectorAll('input').forEach(function (box) {
