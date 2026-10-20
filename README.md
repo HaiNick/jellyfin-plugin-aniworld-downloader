@@ -114,7 +114,13 @@ Updates then show up in the catalog like any other plugin.
 
 ## Releasing
 
-Tag a version; the changelog is the tag message:
+Raise the version in `build.yaml` and in the `.csproj` (`Version`,
+`AssemblyVersion` and `FileVersion`), then merge that into `main`. The Auto
+tag workflow sees a version without a tag, tags it with the commits since the
+last release as the changelog, and starts the Release workflow.
+
+To write the changelog yourself, tag by hand instead; the tag message is the
+changelog, and Auto tag then leaves that version alone:
 
 ```sh
 git tag -a v0.2.0.0 -m "What changed"
