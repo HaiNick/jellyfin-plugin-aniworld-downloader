@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.1.0",
+        "changelog": "- tag and release a new version when it reaches main\n- link the detail page to the title's own site",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/v0.2.1.0/aniworld-downloader_0.2.1.0.zip",
+        "checksum": "4f1c7f84662d8dd0bd3c858d1750f27c",
+        "timestamp": "2026-10-20T15:26:27Z"
+      },
+      {
         "version": "0.2.0.0",
         "changelog": "Search results appear site by site as each site answers. Before searching, the page shows new and popular anime, series and movies. Jellyfin's own series page gets a button to download the missing episodes, and you get a message in Jellyfin when a download is done.",
         "targetAbi": "12.2.0.0",
