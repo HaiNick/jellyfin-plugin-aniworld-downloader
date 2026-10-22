@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.1.2",
+        "changelog": "Development build of claude/nifty-fermi-ht0g2i at 8d594d5. Not a release; it may break.\n\n- log the queue page's failed polls quietly\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.1.2/aniworld-downloader_0.2.1.2.zip",
+        "checksum": "52ffc749fac08f355cc596c165164af9",
+        "timestamp": "2026-10-22T06:51:32Z"
+      },
+      {
         "version": "0.2.1.1",
         "changelog": "Development build of claude/nifty-fermi-ht0g2i at 37428cf. Not a release; it may break.\n\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
         "targetAbi": "12.2.0.0",
