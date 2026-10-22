@@ -35,6 +35,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public string DefaultProvider { get; set; } = "VOE";
 
     /// <summary>
+    /// Gets or sets a value indicating whether a finished download starts a
+    /// library scan, so it shows up without waiting for the scheduled one.
+    /// </summary>
+    public bool ScanAfterDownload { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the secret that signs poster links, so the image proxy
     /// only fetches what the plugin itself handed out. Made on first use.
     /// </summary>

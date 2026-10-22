@@ -12,7 +12,9 @@ page shows AniWorld's lists of new and popular anime, series and movies.
 A title shows its seasons and episodes with their languages; pick a language
 and hoster, tick episodes and download. When it's done, whoever started it
 gets a message in their open Jellyfin apps, and the dashboard's Activity log
-has an entry. Tested in the web client and the official Android app.
+has an entry. This works across a Jellyfin restart: the plugin keeps who
+queued what in `owners.json` next to its settings. Tested in the web client
+and the official Android app.
 
 - **In library:** titles you already have get a badge and a link to the
   Jellyfin item; only libraries the user can see count. A switch next to the
@@ -24,6 +26,14 @@ has an entry. Tested in the web client and the official Android app.
   AniWorld Downloader).
 - **Queue:** the downloads with live progress; users who may download can
   cancel.
+- **Library scan:** a finished download shows up in Jellyfin within about a
+  minute. A series already in the library gets only its own folder scanned;
+  anything new starts a full library scan. A run of downloads ends in one
+  scan, at most 10 minutes after the first one finished. Turn it off in the
+  settings with **Scan the library after a download**.
+- **Outages:** when AniWorld Downloader stops answering, or rejects the API
+  key, the Activity log gets one "unavailable" entry, and one "available
+  again" entry when it is back.
 
 ## API
 
@@ -111,6 +121,31 @@ built-in versions.
    API key with "Read and download" access if its login is on).
 
 Updates then show up in the catalog like any other plugin.
+
+## Development builds
+
+Every push to a branch other than `main` builds a development version and
+lists it in a second plugin repository. To get them, add this URL in
+**Dashboard → Plugins → Repositories** as well, next to the stable one:
+
+```
+https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/dev-manifest/manifest.json
+```
+
+- A dev build has the newest release's version with the build number as the
+  last part, for example `0.2.1.57` on top of `0.2.1.0`. Jellyfin offers it as
+  an update, and the next release (`0.2.2.0`) is newer than it again.
+- Its changelog names the branch and commit, and lists the commits that
+  aren't on `main` yet. Builds from different branches share one list, so the
+  newest push wins; pick an older version on the plugin's page to go back.
+- Only the newest 10 builds stay listed. The
+  [Dev build workflow](.github/workflows/dev-build.yml) deletes the
+  pre-release and tag of older ones.
+- Pushes that change only Markdown files don't build. Run the workflow by
+  hand under **Actions → Dev build** to build anyway.
+
+To leave the dev channel, remove the repository, then install the newest
+release from the catalog once it is newer than your dev build.
 
 ## Releasing
 

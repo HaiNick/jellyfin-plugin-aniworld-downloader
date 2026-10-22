@@ -1,0 +1,134 @@
+# Every push to a branch other than main builds a development version, so
+# work in progress can be installed from Jellyfin's catalog before it is
+# released. The builds are GitHub pre-releases, listed in a second plugin
+# repository, manifest.json on the dev-manifest branch:
+#
+#   https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/dev-manifest/manifest.json
+#
+# A dev build is the newest release's version with this workflow's run
+# number as the last part (0.2.1.57), so it is always newer than that release
+# (0.2.1.0), and the next release (0.2.2.0) is newer than it again, even when
+# a branch already raised build.yaml to it. Only the newest builds stay
+# listed; older ones lose their release and tag.
+name: Dev build
+
+on:
+  push:
+    branches-ignore: [main, dev-manifest]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Builds take turns at the dev-manifest branch
+concurrency:
+  group: dev-manifest
+  cancel-in-progress: false
+
+env:
+  KEEP: "10"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Pick the version
+        id: version
+        run: |
+          # The newest release, not build.yaml: a branch that raises build.yaml
+          # for the next release must not build past it
+          base="$(git tag -l 'v*' --sort=-v:refname | head -n 1)"
+          base="${base#v}"
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "No release tag like v1.2.3.4 to build on, got '$base'" >&2
+            exit 1
+          fi
+          version="${base%.*}.${GITHUB_RUN_NUMBER}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-v$version" >> "$GITHUB_OUTPUT"
+
+          git fetch -q origin main
+          {
+            echo "Development build of ${GITHUB_REF_NAME} at ${GITHUB_SHA::7}. Not a release; it may break."
+            echo
+            git log --no-merges --format='- %s' origin/main..HEAD | head -n 20
+          } > changelog.txt
+
+      # Jellyfin builds every plugin controller at startup; these tests catch
+      # what would otherwise stop the server from starting
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.AniWorldDownloader.Tests
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dotnet publish Jellyfin.Plugin.AniWorldDownloader -c Release -o artifacts \
+            -p:Version="$VERSION" -p:AssemblyVersion="$VERSION" -p:FileVersion="$VERSION"
+          zip -j "aniworld-downloader_${VERSION}.zip" artifacts/Jellyfin.Plugin.AniWorldDownloader.dll
+          md5sum "aniworld-downloader_${VERSION}.zip" | cut -d' ' -f1 > checksum.txt
+
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          zip="aniworld-downloader_${VERSION}.zip"
+          # Re-running a build replaces its zip and notes instead of failing
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$zip" --clobber
+            gh release edit "$TAG" --notes-file changelog.txt
+          else
+            gh release create "$TAG" "$zip" --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "AniWorld Downloader $VERSION (dev, $GITHUB_REF_NAME)" --notes-file changelog.txt
+          fi
+
+      - name: Add it to the dev manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/aniworld-downloader_${VERSION}.zip"
+          checksum="$(cat checksum.txt)"
+          changelog="$(cat changelog.txt)"
+          script="$PWD/.github/scripts/update_manifest.py"
+          dir="$RUNNER_TEMP/dev-manifest"
+
+          # A worktree keeps the checkout's credentials for the push
+          if git ls-remote --exit-code --heads origin dev-manifest >/dev/null; then
+            git fetch -q origin dev-manifest
+            git worktree add -q -B dev-manifest "$dir" FETCH_HEAD
+            cd "$dir"
+          else
+            git worktree add -q --detach "$dir"
+            cd "$dir"
+            git checkout -q --orphan dev-manifest
+            git rm -rfq .
+            printf '%s\n' "# Dev builds" "" \
+              "Jellyfin plugin repository for development builds, written by .github/workflows/dev-build.yml on main's branches." \
+              "Add the raw manifest.json URL in Jellyfin; see the README on main." > README.md
+            git add README.md
+          fi
+
+          dropped="$(python3 "$script" manifest.json "$VERSION" "$url" "$checksum" "$changelog" "$KEEP")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -q -m "add $VERSION to the dev manifest"
+          git push -q origin dev-manifest
+
+          for old in $dropped; do
+            gh release delete "dev-v$old" --yes --cleanup-tag || echo "could not delete dev-v$old"
+          done

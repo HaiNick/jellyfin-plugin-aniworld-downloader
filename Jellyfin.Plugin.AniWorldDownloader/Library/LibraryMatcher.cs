@@ -49,6 +49,23 @@ public partial class LibraryMatcher
     }
 
     /// <summary>
+    /// The library item with this title in any library, for work that no
+    /// user asked for, such as the scan after a download.
+    /// </summary>
+    /// <param name="title">The title from a site.</param>
+    /// <returns>The item ID, or null.</returns>
+    public Guid? FindAnywhere(string? title)
+    {
+        var key = Normalise(title);
+        if (key.Length == 0)
+        {
+            return null;
+        }
+
+        return TitlesFor(null).TryGetValue(key, out var id) ? id : null;
+    }
+
+    /// <summary>
     /// Reduces a title to what two sites, or a site and a folder, agree on:
     /// lower case, no accents, punctuation or brackets, so "Dragon Ball Super:
     /// Beerus" and "Dragon Ball Super Beerus (2015)" come out the same.
@@ -92,19 +109,20 @@ public partial class LibraryMatcher
         return builder.ToString();
     }
 
-    private Dictionary<string, Guid> TitlesFor(User user)
+    // No user means every library; Guid.Empty is its cache slot
+    private Dictionary<string, Guid> TitlesFor(User? user)
     {
-        if (_cache.TryGetValue(user.Id, out var hit) && DateTime.UtcNow - hit.At < _cacheFor)
+        var cacheKey = user?.Id ?? Guid.Empty;
+        if (_cache.TryGetValue(cacheKey, out var hit) && DateTime.UtcNow - hit.At < _cacheFor)
         {
             return hit.Titles;
         }
 
-        var items = _libraryManager.GetItemList(new InternalItemsQuery(user)
-        {
-            IncludeItemTypes = [BaseItemKind.Series, BaseItemKind.Movie],
-            Recursive = true,
-            IsVirtualItem = false,
-        });
+        var query = user is null ? new InternalItemsQuery() : new InternalItemsQuery(user);
+        query.IncludeItemTypes = [BaseItemKind.Series, BaseItemKind.Movie];
+        query.Recursive = true;
+        query.IsVirtualItem = false;
+        var items = _libraryManager.GetItemList(query);
 
         var titles = new Dictionary<string, Guid>(StringComparer.Ordinal);
         foreach (var item in items)
@@ -119,7 +137,7 @@ public partial class LibraryMatcher
             }
         }
 
-        _cache[user.Id] = (DateTime.UtcNow, titles);
+        _cache[cacheKey] = (DateTime.UtcNow, titles);
         return titles;
     }
 

@@ -364,7 +364,10 @@ public class AniWorldProxyController : ControllerBase
             "queue",
             new() { ["limit"] = limit?.ToString(), ["offset"] = offset?.ToString(), ["status"] = status },
             cancellationToken,
-            requireUrl: false);
+            requireUrl: false,
+            // The queue page asks every few seconds and shows the error itself;
+            // the download watcher reports an outage once
+            quiet: true);
 
     /// <summary>
     /// Cancels a queued or running download. Needs the download permission.
@@ -527,14 +530,15 @@ public class AniWorldProxyController : ControllerBase
         string path,
         Dictionary<string, string?> query,
         CancellationToken cancellationToken,
-        bool requireUrl = true)
+        bool requireUrl = true,
+        bool quiet = false)
     {
         if (requireUrl && string.IsNullOrWhiteSpace(query.GetValueOrDefault("url")))
         {
             return BadRequest(new JsonObject { ["error"] = "url is required" });
         }
 
-        return Reply(await _aniWorld.SendAsync(HttpMethod.Get, path, query, null, cancellationToken).ConfigureAwait(false));
+        return Reply(await _aniWorld.SendAsync(HttpMethod.Get, path, query, null, cancellationToken, quiet).ConfigureAwait(false));
     }
 
     private ObjectResult Reply(AniWorldReply reply) => StatusCode(reply.Status, reply.Json);
