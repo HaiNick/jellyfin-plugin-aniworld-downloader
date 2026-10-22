@@ -132,7 +132,7 @@ lists it in a second plugin repository. To get them, add this URL in
 https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/dev-manifest/manifest.json
 ```
 
-- A dev build has the version in `build.yaml` with the build number as the
+- A dev build has the newest release's version with the build number as the
   last part, for example `0.2.1.57` on top of `0.2.1.0`. Jellyfin offers it as
   an update, and the next release (`0.2.2.0`) is newer than it again.
 - Its changelog names the branch and commit, and lists the commits that

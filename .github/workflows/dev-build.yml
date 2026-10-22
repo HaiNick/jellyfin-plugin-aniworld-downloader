@@ -5,10 +5,11 @@
 #
 #   https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/dev-manifest/manifest.json
 #
-# A dev build is build.yaml's version with this workflow's run number as the
-# last part (0.2.1.57), so it is always newer than the release it builds on
-# (0.2.1.0), and the next release (0.2.2.0) is newer than it again. Only the
-# newest builds stay listed; older ones lose their release and tag.
+# A dev build is the newest release's version with this workflow's run
+# number as the last part (0.2.1.57), so it is always newer than that release
+# (0.2.1.0), and the next release (0.2.2.0) is newer than it again, even when
+# a branch already raised build.yaml to it. Only the newest builds stay
+# listed; older ones lose their release and tag.
 name: Dev build
 
 on:
@@ -43,9 +44,12 @@ jobs:
       - name: Pick the version
         id: version
         run: |
-          base="$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' build.yaml)"
+          # The newest release, not build.yaml: a branch that raises build.yaml
+          # for the next release must not build past it
+          base="$(git tag -l 'v*' --sort=-v:refname | head -n 1)"
+          base="${base#v}"
           if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "build.yaml must have a version like 1.2.3.4, got '$base'" >&2
+            echo "No release tag like v1.2.3.4 to build on, got '$base'" >&2
             exit 1
           fi
           version="${base%.*}.${GITHUB_RUN_NUMBER}"
