@@ -60,6 +60,16 @@
                             </select>
                             <div class="fieldDescription">Used when a title offers it; users can still pick another one.</div>
                         </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ScanAfterDownload" name="ScanAfterDownload" type="checkbox" is="emby-checkbox" />
+                                <span>Scan the library after a download</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Finished downloads show up in Jellyfin within a minute instead of at the next scheduled
+                                scan. A series already in the library gets only its own folder scanned.
+                            </div>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -123,6 +133,7 @@
                         field('ApiKey').value = config.ApiKey || '';
                         field('DefaultLanguage').value = config.DefaultLanguage || 'German Dub';
                         field('DefaultProvider').value = config.DefaultProvider || 'VOE';
+                        field('ScanAfterDownload').checked = config.ScanAfterDownload !== false;
                         r[1].forEach(function (u) { u.Id = normaliseId(u.Id); });
                         renderUsers(r[1], (config.DownloadUserIds || []).map(normaliseId));
                         Dashboard.hideLoadingMsg();
@@ -169,6 +180,7 @@
                         config.ApiKey = field('ApiKey').value.trim();
                         config.DefaultLanguage = field('DefaultLanguage').value;
                         config.DefaultProvider = field('DefaultProvider').value;
+                        config.ScanAfterDownload = field('ScanAfterDownload').checked;
                         config.DownloadUserIds = Array.prototype.map.call(
                             page.querySelectorAll('.chkDownloadUser:checked'),
                             function (box) { return box.getAttribute('data-id'); });

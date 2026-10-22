@@ -53,15 +53,17 @@ public class AniWorldClient
     /// <param name="query">Query parameters; null values are left out.</param>
     /// <param name="body">A JSON body, or null.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="quiet">Log failures at debug level, for background checks that report outages themselves.</param>
     /// <returns>The status and the JSON reply, with poster links rewritten.</returns>
     public Task<AniWorldReply> SendAsync(
         HttpMethod method,
         string path,
         IDictionary<string, string?>? query,
         JsonNode? body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool quiet = false)
     {
-        return SendAsync(Config.AniWorldUrl, Config.ApiKey, method, path, query, body, cancellationToken);
+        return SendAsync(Config.AniWorldUrl, Config.ApiKey, method, path, query, body, cancellationToken, quiet);
     }
 
     /// <summary>
@@ -75,6 +77,7 @@ public class AniWorldClient
     /// <param name="query">Query parameters; null values are left out.</param>
     /// <param name="body">A JSON body, or null.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="quiet">Log failures at debug level, for background checks that report outages themselves.</param>
     /// <returns>The status and the JSON reply, with poster links rewritten.</returns>
     public async Task<AniWorldReply> SendAsync(
         string baseUrl,
@@ -83,8 +86,10 @@ public class AniWorldClient
         string path,
         IDictionary<string, string?>? query,
         JsonNode? body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool quiet = false)
     {
+        var failureLevel = quiet ? LogLevel.Debug : LogLevel.Warning;
         if (!TryBuildUri(baseUrl, "api/" + path, query, out var uri))
         {
             return AniWorldReply.Error(503, "AniWorld Downloader is not set up yet. An admin can add its URL in the plugin settings.");
@@ -117,7 +122,7 @@ public class AniWorldClient
             catch (JsonException)
             {
                 // A login page or a proxy error, not the API
-                _logger.LogWarning("AniWorld Downloader sent no JSON for {Path} (HTTP {Status})", path, status);
+                _logger.Log(failureLevel, "AniWorld Downloader sent no JSON for {Path} (HTTP {Status})", path, status);
                 return AniWorldReply.Error(502, $"AniWorld Downloader answered HTTP {status} without JSON. Check the URL.");
             }
 
@@ -126,7 +131,7 @@ public class AniWorldClient
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning(ex, "AniWorld Downloader unreachable for {Path}", path);
+            _logger.Log(failureLevel, ex, "AniWorld Downloader unreachable for {Path}", path);
             return AniWorldReply.Error(502, "Could not reach AniWorld Downloader: " + ex.Message);
         }
     }

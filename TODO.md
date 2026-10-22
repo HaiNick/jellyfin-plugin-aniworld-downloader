@@ -17,7 +17,7 @@ things users already run into.
 
 ## 1. Quick wins
 
-### [ ] 1.1 Scan the library when a download finishes
+### [x] 1.1 Scan the library when a download finishes
 
 - **Why:** New episodes and the **In library** badge only show up after
   Jellyfin's own scheduled library scan runs, which can be hours later.
@@ -35,7 +35,7 @@ things users already run into.
   scan.
 - **Size:** S
 
-### [ ] 1.2 Keep download owners across restarts
+### [x] 1.2 Keep download owners across restarts
 
 - **Why:** `DownloadOwners` lives in memory only. After a Jellyfin restart,
   the "done" message for a running download goes to all admins instead of
@@ -51,16 +51,18 @@ things users already run into.
   message still reaches the user who started it.
 - **Size:** S
 
-### [ ] 1.3 Make downloader outages visible
+### [x] 1.3 Make downloader outages visible
 
-- **Why:** When the queue check fails, the watcher logs at `Debug`
-  (line 96), which is hidden at the default log level. If AniWorld
-  Downloader is down, nobody finds out from Jellyfin.
+- **Why:** When AniWorld Downloader is down, `AniWorldClient` logs a
+  warning with a stack trace on every queue check (once a minute), while an
+  error reply such as a rejected API key logs nothing. Neither reaches the
+  Activity log, so nobody finds out from the dashboard.
 - **Where:** `AniWorld/DownloadWatcher.cs`, `ExecuteAsync`.
-- **How:** Track an `_online` flag. On the first failure after a success,
-  log one `Warning` and write an Activity log entry ("AniWorld Downloader is
-  unreachable"). On the first success after a failure, log and record that
-  it's back. Keep the per-poll failures at `Debug`.
+- **How:** Track the state in `ConnectionState`. After two failed checks in
+  a row, log one `Warning` and write an Activity log entry ("AniWorld
+  Downloader is unavailable"). On the first success after that, log and
+  record that it's back. The watcher's own requests log their failures at
+  `Debug`.
 - **Done when:** Stopping the downloader produces exactly one warning and
   one Activity log entry, and starting it again produces one "back online"
   entry.

@@ -25,6 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Jellyfin.Plugin.AniWorldDownloader.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Web\client.js" />
     <EmbeddedResource Include="Configuration\configPage.html" />
   </ItemGroup>

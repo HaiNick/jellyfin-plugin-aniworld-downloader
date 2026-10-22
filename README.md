@@ -12,7 +12,9 @@ page shows AniWorld's lists of new and popular anime, series and movies.
 A title shows its seasons and episodes with their languages; pick a language
 and hoster, tick episodes and download. When it's done, whoever started it
 gets a message in their open Jellyfin apps, and the dashboard's Activity log
-has an entry. Tested in the web client and the official Android app.
+has an entry. This works across a Jellyfin restart: the plugin keeps who
+queued what in `owners.json` next to its settings. Tested in the web client
+and the official Android app.
 
 - **In library:** titles you already have get a badge and a link to the
   Jellyfin item; only libraries the user can see count. A switch next to the
@@ -24,6 +26,14 @@ has an entry. Tested in the web client and the official Android app.
   AniWorld Downloader).
 - **Queue:** the downloads with live progress; users who may download can
   cancel.
+- **Library scan:** a finished download shows up in Jellyfin within about a
+  minute. A series already in the library gets only its own folder scanned;
+  anything new starts a full library scan. A run of downloads ends in one
+  scan, at most 10 minutes after the first one finished. Turn it off in the
+  settings with **Scan the library after a download**.
+- **Outages:** when AniWorld Downloader stops answering, or rejects the API
+  key, the Activity log gets one "unavailable" entry, and one "available
+  again" entry when it is back.
 
 ## API
 
