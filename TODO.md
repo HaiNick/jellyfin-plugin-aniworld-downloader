@@ -24,9 +24,10 @@ things users already run into.
 - **Where:** `AniWorld/DownloadWatcher.cs`, in `CheckAsync` where a finished
   download calls `NotifyAsync` (around line 144).
 - **How:** After a `completed` status, queue a scan through
-  `ILibraryManager`. Scanning only the folder the title landed in is
-  cheaper than a full scan; fall back to `ValidateMediaLibrary` if the folder
-  is unknown. Debounce it, so 12 episodes that finish within a minute cause
+  `ILibraryManager`. The downloader's queue items don't say which folder a
+  download went to, so the plugin can't scan just that folder. If
+  `LibraryMatcher` finds the series in the library, refresh that item's
+  folder; otherwise run `ValidateMediaLibrary`. Debounce it, so 12 episodes that finish within a minute cause
   one scan, not 12. Add a setting **Scan the library after a download**
   (on by default) to `PluginConfiguration` and `configPage.html`.
 - **Done when:** A finished download appears in Jellyfin within about a
