@@ -1,0 +1,20 @@
+[
+  {
+    "guid": "31b711c1-95e5-4481-b7cc-3e43b0476b6d",
+    "name": "AniWorld Downloader",
+    "overview": "Search for and download anime, series and movies through AniWorld Downloader",
+    "description": "Adds an AniWorld page to the Jellyfin web client and the official Android and iOS apps. It searches AniWorld Downloader, queues downloads into your libraries and can keep series up to date with Auto-Sync.",
+    "owner": "HaiNick",
+    "category": "General",
+    "versions": [
+      {
+        "version": "0.2.1.1",
+        "changelog": "Development build of claude/nifty-fermi-ht0g2i at 37428cf. Not a release; it may break.\n\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.1.1/aniworld-downloader_0.2.1.1.zip",
+        "checksum": "5516423a043f3e652ec7855506c237dd",
+        "timestamp": "2026-10-22T06:12:31Z"
+      }
+    ]
+  }
+]
