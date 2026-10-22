@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.0",
+        "changelog": "- base dev build versions on the newest release, not build.yaml\n- log the queue page's failed polls quietly\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/v0.2.2.0/aniworld-downloader_0.2.2.0.zip",
+        "checksum": "ec5c0f477104674f846f903d51fba80b",
+        "timestamp": "2026-10-22T06:58:14Z"
+      },
+      {
         "version": "0.2.1.0",
         "changelog": "- tag and release a new version when it reaches main\n- link the detail page to the title's own site",
         "targetAbi": "12.2.0.0",
