@@ -122,6 +122,31 @@ built-in versions.
 
 Updates then show up in the catalog like any other plugin.
 
+## Development builds
+
+Every push to a branch other than `main` builds a development version and
+lists it in a second plugin repository. To get them, add this URL in
+**Dashboard → Plugins → Repositories** as well, next to the stable one:
+
+```
+https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/dev-manifest/manifest.json
+```
+
+- A dev build has the version in `build.yaml` with the build number as the
+  last part, for example `0.2.1.57` on top of `0.2.1.0`. Jellyfin offers it as
+  an update, and the next release (`0.2.2.0`) is newer than it again.
+- Its changelog names the branch and commit, and lists the commits that
+  aren't on `main` yet. Builds from different branches share one list, so the
+  newest push wins; pick an older version on the plugin's page to go back.
+- Only the newest 10 builds stay listed. The
+  [Dev build workflow](.github/workflows/dev-build.yml) deletes the
+  pre-release and tag of older ones.
+- Pushes that change only Markdown files don't build. Run the workflow by
+  hand under **Actions → Dev build** to build anyway.
+
+To leave the dev channel, remove the repository, then install the newest
+release from the catalog once it is newer than your dev build.
+
 ## Releasing
 
 Raise the version in `build.yaml` and in the `.csproj` (`Version`,
