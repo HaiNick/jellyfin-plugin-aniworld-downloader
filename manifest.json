@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.5",
+        "changelog": "Development build of nav-queue-badge at fe8a749. Not a release; it may break.\n\n- remove the nav entry's download count badge again\n- show the active download count as a badge on the nav entry",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.5/aniworld-downloader_0.2.2.5.zip",
+        "checksum": "5a1e7df29682f548bf39b94a4dffcecc",
+        "timestamp": "2026-10-23T06:44:04Z"
+      },
+      {
         "version": "0.2.2.4",
         "changelog": "Development build of nav-queue-badge at 8d25386. Not a release; it may break.\n\n- show the active download count as a badge on the nav entry",
         "targetAbi": "12.2.0.0",
