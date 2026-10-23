@@ -118,8 +118,10 @@ things users already run into.
   view refreshes afterwards.
 - **Size:** M
 
-### [ ] 2.3 Active-download count in the nav entry
+### [-] 2.3 Active-download count in the nav entry
 
+- **Dropped** on 2026-10-23: tried in dev build 0.2.2.4. The badge looked
+  out of place and didn't add anything, so it was removed again.
 - **Why:** You can't see from anywhere else in Jellyfin that something is
   downloading.
 - **Where:** `addNavEntry` in `Web/client.js` (line 315); a new proxy
