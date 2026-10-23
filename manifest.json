@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.4",
+        "changelog": "Development build of nav-queue-badge at 8d25386. Not a release; it may break.\n\n- show the active download count as a badge on the nav entry",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.4/aniworld-downloader_0.2.2.4.zip",
+        "checksum": "63f70793e806f87c08093c3cf3e06900",
+        "timestamp": "2026-10-23T06:36:55Z"
+      },
+      {
         "version": "0.2.1.3",
         "changelog": "Development build of claude/nifty-fermi-ht0g2i at b121954. Not a release; it may break.\n\n- bump the version to 0.2.2.0\n- base dev build versions on the newest release, not build.yaml\n- log the queue page's failed polls quietly\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
         "targetAbi": "12.2.0.0",
