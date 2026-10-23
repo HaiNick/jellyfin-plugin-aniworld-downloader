@@ -142,10 +142,24 @@ public class AniWorldClient
     /// <param name="imageUrl">The original image URL.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The image bytes and type, or null when it failed.</returns>
-    public async Task<(byte[] Data, string ContentType)?> GetImageAsync(string imageUrl, CancellationToken cancellationToken)
+    public Task<(byte[] Data, string ContentType)?> GetImageAsync(string imageUrl, CancellationToken cancellationToken)
+        => GetImageAsync("proxy-image", new Dictionary<string, string?> { ["url"] = imageUrl }, cancellationToken);
+
+    /// <summary>
+    /// Fetches what the captcha browser of a running download shows right now.
+    /// </summary>
+    /// <param name="queueId">The queue item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The JPEG and its type, or null when there is no captcha.</returns>
+    public Task<(byte[] Data, string ContentType)?> GetCaptchaScreenshotAsync(int queueId, CancellationToken cancellationToken)
+        => GetImageAsync($"captcha/{queueId}/screenshot", null, cancellationToken);
+
+    private async Task<(byte[] Data, string ContentType)?> GetImageAsync(
+        string path,
+        IDictionary<string, string?>? query,
+        CancellationToken cancellationToken)
     {
-        var query = new Dictionary<string, string?> { ["url"] = imageUrl };
-        if (!TryBuildUri(Config.AniWorldUrl, "api/proxy-image", query, out var uri))
+        if (!TryBuildUri(Config.AniWorldUrl, "api/" + path, query, out var uri))
         {
             return null;
         }
@@ -170,7 +184,7 @@ public class AniWorldClient
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogDebug(ex, "Poster fetch failed for {Url}", imageUrl);
+            _logger.LogDebug(ex, "Image fetch failed for {Path}", path);
             return null;
         }
     }
