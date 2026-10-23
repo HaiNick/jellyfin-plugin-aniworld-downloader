@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <!-- The plugin's card in Jellyfin's plugin list. Render with:
+       rsvg-convert -w 1280 -h 720 images/logo.svg -o images/logo.png -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2a4a"/>
+      <stop offset="1" stop-color="#0d1526"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3fb6ff"/>
+      <stop offset="1" stop-color="#0b84d8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <!-- Download icon in a rounded tile -->
+  <g transform="translate(210 250)">
+    <rect width="220" height="220" rx="48" fill="url(#accent)"/>
+    <g transform="translate(20 20) scale(7.5)" fill="#fff">
+      <path d="M5 20h14v-2H5zM19 9h-4V3H9v6H5l7 7z"/>
+    </g>
+  </g>
+  <text x="480" y="378" font-family="Noto Sans, sans-serif" font-weight="700" font-size="132" fill="#fff" letter-spacing="-2">Ani<tspan fill="#3fb6ff">World</tspan></text>
+  <text x="486" y="458" font-family="Noto Sans, sans-serif" font-weight="500" font-size="62" fill="#c9d6ea" letter-spacing="6">DOWNLOADER</text>
+</svg>
