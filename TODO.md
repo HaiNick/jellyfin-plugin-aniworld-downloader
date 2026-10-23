@@ -82,8 +82,11 @@ things users already run into.
 
 ## 2. Queue and downloads
 
-### [x] 2.1 Show and solve captchas in the queue
+### [-] 2.1 Show and solve captchas in the queue
 
+- **Dropped** on 2026-10-23: built and tried in dev builds 0.2.2.6 to 0.2.2.9.
+  Kinox's verification wall didn't go through the captcha browser, the same
+  titles are on other sites, and the viewer wasn't worth keeping for the rest.
 - **Why:** Some hosters ask for a captcha. The downloader can show it, but
   `client.js` never asks, so in Jellyfin the download just looks stuck.
 - **Where:** New proxy endpoints in `Api/AniWorldProxyController.cs`; the

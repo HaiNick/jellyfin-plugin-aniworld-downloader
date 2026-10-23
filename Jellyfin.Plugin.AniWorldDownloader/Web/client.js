@@ -264,17 +264,6 @@
             '#' + PAGE_ID + ' .aniworld-progress{height:.3em;border-radius:.15em;margin-top:.45em;background:rgba(128,128,128,.25);overflow:hidden}',
             '#' + PAGE_ID + ' .aniworld-progress span{display:block;height:100%;background:var(--aniworld-accent,#00a4dc);transition:width .5s}',
             '#' + PAGE_ID + ' .aniworld-queue-item .emby-button{margin:0;min-height:2.5em;flex:none}',
-            '#' + PAGE_ID + ' .aniworld-queue-buttons{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5em}',
-            // The captcha over the whole screen, so it is as big as a phone allows
-            '#' + PAGE_ID + ' .aniworld-captcha{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;' +
-            'justify-content:center;gap:.75em;padding:1em;box-sizing:border-box;background:rgba(0,0,0,.9);color:#fff}',
-            '#' + PAGE_ID + ' .aniworld-captcha-bar{display:flex;align-items:center;justify-content:space-between;gap:1em;width:100%;max-width:60em}',
-            '#' + PAGE_ID + ' .aniworld-captcha-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-            '#' + PAGE_ID + ' .aniworld-captcha-bar .emby-button{margin:0;min-height:2.75em;flex:none}',
-            // No object-fit: the box has to match the picture, or clicks land off target
-            '#' + PAGE_ID + ' .aniworld-captcha img{display:block;width:auto;height:auto;max-width:100%;max-height:calc(100vh - 9em);' +
-            'max-height:calc(100dvh - 9em);border-radius:.2em;cursor:crosshair;touch-action:manipulation}',
-            '#' + PAGE_ID + ' .aniworld-captcha-hint{max-width:40em;font-size:.9em;opacity:.8;text-align:center}',
             '#' + PAGE_ID + ' .aniworld-head{display:flex;gap:1em;align-items:flex-start}',
             '#' + PAGE_ID + ' .aniworld-head .aniworld-poster{width:10em;flex:none}',
             '#' + PAGE_ID + ' .aniworld-head-text{flex:1;min-width:0}',
@@ -1017,33 +1006,16 @@
                     }
                 }
 
-                var buttons = '';
-                // AniWorld sets captcha_url while its browser waits for someone to solve one
-                if (info.canDownload && item.status === 'running' && item.captcha_url) {
-                    parts.push('waiting for a captcha');
-                    buttons += '<button type="button" class="raised button-submit emby-button aniworld-captcha-open" data-id="' + item.id + '">' +
-                        'Solve captcha</button>';
-                }
-
-                if (info.canDownload && (item.status === 'queued' || item.status === 'running')) {
-                    buttons += '<button type="button" class="raised emby-button aniworld-cancel" data-id="' + item.id + '">Cancel</button>';
-                }
+                var cancel = info.canDownload && (item.status === 'queued' || item.status === 'running')
+                    ? '<button type="button" class="raised emby-button aniworld-cancel" data-id="' + item.id + '">Cancel</button>'
+                    : '';
 
                 return '<div class="aniworld-queue-item" data-status="' + escapeHtml(item.status) + '">' +
                     '<div class="aniworld-queue-text">' +
                     '<div class="aniworld-queue-title">' + escapeHtml(item.title) + '</div>' +
                     '<div class="aniworld-queue-sub">' + escapeHtml(parts.join(' · ')) + '</div>' +
-                    progress + '</div>' +
-                    (buttons ? '<div class="aniworld-queue-buttons">' + buttons + '</div>' : '') + '</div>';
+                    progress + '</div>' + cancel + '</div>';
             }).join('');
-
-            list.querySelectorAll('.aniworld-captcha-open').forEach(function (button) {
-                button.addEventListener('click', function () {
-                    var id = Number(button.getAttribute('data-id'));
-                    var item = items.filter(function (i) { return i.id === id; })[0];
-                    openCaptcha(id, item ? item.title : '');
-                });
-            });
 
             list.querySelectorAll('.aniworld-cancel').forEach(function (button) {
                 button.addEventListener('click', function () {
@@ -1058,116 +1030,7 @@
             });
         }
 
-        // The captcha viewer: a fresh screenshot every second, and clicks sent
-        // to AniWorld's browser at the same spot on its page
-        var captchaViewer = null;
-
-        function openCaptcha(id, title) {
-            closeCaptcha();
-            var viewer = el('<div class="aniworld-captcha" role="dialog" aria-modal="true" aria-label="Solve captcha">' +
-                '<div class="aniworld-captcha-bar"><div class="aniworld-captcha-title"></div>' +
-                '<button type="button" class="raised emby-button aniworld-captcha-close">Close</button></div>' +
-                '<img alt="The captcha, as AniWorld Downloader\'s browser shows it">' +
-                '<div class="aniworld-captcha-hint">Loading the captcha…</div></div>');
-            viewer.querySelector('.aniworld-captcha-title').textContent = title ? 'Captcha for ' + title : 'Captcha';
-            inner.appendChild(viewer);
-            captchaViewer = viewer;
-            document.addEventListener('keydown', closeOnEscape);
-
-            var img = viewer.querySelector('img');
-            var hint = viewer.querySelector('.aniworld-captcha-hint');
-            var objectUrl = null;
-            viewer.querySelector('.aniworld-captcha-close').addEventListener('click', closeCaptcha);
-            viewer.querySelector('.aniworld-captcha-close').focus();
-
-            img.addEventListener('click', function (e) {
-                if (!img.naturalWidth) {
-                    return;
-                }
-
-                // The picture is shrunk to fit; AniWorld wants its own pixels
-                var rect = img.getBoundingClientRect();
-                api('POST', 'Queue/' + id + '/Captcha/Click', {
-                    X: Math.round((e.clientX - rect.left) * img.naturalWidth / rect.width),
-                    Y: Math.round((e.clientY - rect.top) * img.naturalHeight / rect.height)
-                }).catch(function (err) {
-                    toast('Click failed: ' + err.message);
-                });
-            });
-
-            function tick() {
-                if (captchaViewer !== viewer || isStale(view, inner)) {
-                    if (objectUrl) {
-                        URL.revokeObjectURL(objectUrl);
-                    }
-
-                    if (captchaViewer === viewer) {
-                        closeCaptcha();
-                    }
-
-                    return;
-                }
-
-                Promise.all([api('GET', 'Queue/' + id + '/Captcha'), captchaScreenshot(id)]).then(function (replies) {
-                    if (captchaViewer !== viewer) {
-                        return;
-                    }
-
-                    var state = replies[0];
-                    if (!state.active || state.done) {
-                        closeCaptcha();
-                        toast('The captcha is closed. The download goes on, or the queue shows why not.');
-                        return;
-                    }
-
-                    // A 404 between two frames keeps the last picture
-                    if (replies[1]) {
-                        var next = URL.createObjectURL(replies[1]);
-                        img.src = next;
-                        if (objectUrl) {
-                            URL.revokeObjectURL(objectUrl);
-                        }
-
-                        objectUrl = next;
-                    }
-
-                    hint.textContent = 'Tap or click where you would on the page. It updates every second.';
-                }, function (err) {
-                    hint.textContent = 'Could not load the captcha: ' + err.message;
-                }).then(function () {
-                    window.setTimeout(tick, 1000);
-                });
-            }
-
-            tick();
-        }
-
-        function closeCaptcha() {
-            document.removeEventListener('keydown', closeOnEscape);
-            if (captchaViewer) {
-                captchaViewer.remove();
-                captchaViewer = null;
-            }
-        }
-
-        function closeOnEscape(e) {
-            if (e.key === 'Escape') {
-                closeCaptcha();
-            }
-        }
-
         poll();
-    }
-
-    // An <img> can't send the Jellyfin login, so the picture comes as a blob
-    function captchaScreenshot(id) {
-        var client = window.ApiClient;
-        return fetch(client.getUrl('AniWorldDownloader/Queue/' + id + '/Captcha/Screenshot'), {
-            headers: { 'Authorization': 'MediaBrowser Token="' + client.accessToken() + '"' },
-            cache: 'no-store'
-        }).then(function (response) {
-            return response.ok ? response.blob() : null;
-        });
     }
 
     function seasonLabel(season) {

@@ -395,74 +395,6 @@ public class AniWorldProxyController : ControllerBase
     }
 
     /// <summary>
-    /// Whether a running download waits for a captcha. Needs the download permission.
-    /// </summary>
-    /// <param name="id">The queue item.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>{active, done}.</returns>
-    [HttpGet("Queue/{id:int}/Captcha")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult> GetCaptchaStatus([FromRoute] int id, CancellationToken cancellationToken)
-    {
-        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
-        {
-            return denied;
-        }
-
-        // Asked every second while the captcha is open
-        return Reply(await _aniWorld.SendAsync(HttpMethod.Get, $"captcha/{id}/status", null, null, cancellationToken, quiet: true).ConfigureAwait(false));
-    }
-
-    /// <summary>
-    /// What the captcha browser shows right now. Needs the download permission.
-    /// </summary>
-    /// <param name="id">The queue item.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A JPEG.</returns>
-    [HttpGet("Queue/{id:int}/Captcha/Screenshot")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> GetCaptchaScreenshot([FromRoute] int id, CancellationToken cancellationToken)
-    {
-        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
-        {
-            return denied;
-        }
-
-        var image = await _aniWorld.GetCaptchaScreenshotAsync(id, cancellationToken).ConfigureAwait(false);
-        if (image is null)
-        {
-            return NotFound(new JsonObject { ["error"] = "No captcha to show" });
-        }
-
-        Response.Headers.CacheControl = "no-store";
-        return File(image.Value.Data, image.Value.ContentType);
-    }
-
-    /// <summary>
-    /// Clicks into the captcha browser. Needs the download permission.
-    /// </summary>
-    /// <param name="id">The queue item.</param>
-    /// <param name="request">Where to click, in screenshot pixels.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>AniWorld's reply.</returns>
-    [HttpPost("Queue/{id:int}/Captcha/Click")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult> ClickCaptcha([FromRoute] int id, [FromBody] CaptchaClickRequest request, CancellationToken cancellationToken)
-    {
-        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
-        {
-            return denied;
-        }
-
-        var body = new JsonObject { ["x"] = request.X, ["y"] = request.Y };
-        return Reply(await _aniWorld.SendAsync(HttpMethod.Post, $"captcha/{id}/click", null, body, cancellationToken).ConfigureAwait(false));
-    }
-
-    /// <summary>
     /// Queues episodes for download. Needs the download permission.
     /// </summary>
     /// <param name="request">What to download.</param>
@@ -722,22 +654,6 @@ public class DownloadRequest
     /// Gets or sets the series page URL.
     /// </summary>
     public string? SeriesUrl { get; set; }
-}
-
-/// <summary>
-/// A click into a captcha, in the screenshot's own pixels.
-/// </summary>
-public class CaptchaClickRequest
-{
-    /// <summary>
-    /// Gets or sets the distance from the left edge.
-    /// </summary>
-    public int X { get; set; }
-
-    /// <summary>
-    /// Gets or sets the distance from the top edge.
-    /// </summary>
-    public int Y { get; set; }
 }
 
 /// <summary>
