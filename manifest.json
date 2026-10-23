@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.11",
+        "changelog": "Development build of manga at 466b8e0. Not a release; it may break.\n\n- search and download manga from MangaFire",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.11/aniworld-downloader_0.2.2.11.zip",
+        "checksum": "1906f317c82d0e6c883d8421dcf5aa5f",
+        "timestamp": "2026-10-23T09:15:39Z"
+      },
+      {
         "version": "0.2.2.10",
         "changelog": "Development build of queue-captcha at ea4420b. Not a release; it may break.\n\n- remove the captcha viewer again\n- drop the Kinox \"solve on the site\" link\n- link Kinox captchas from the queue, and give the plugin card a logo\n- show and solve captchas from the queue view",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.1.2/aniworld-downloader_0.2.1.2.zip",
         "checksum": "52ffc749fac08f355cc596c165164af9",
         "timestamp": "2026-10-22T06:51:32Z"
-      },
-      {
-        "version": "0.2.1.1",
-        "changelog": "Development build of claude/nifty-fermi-ht0g2i at 37428cf. Not a release; it may break.\n\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.1.1/aniworld-downloader_0.2.1.1.zip",
-        "checksum": "5516423a043f3e652ec7855506c237dd",
-        "timestamp": "2026-10-22T06:12:31Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
