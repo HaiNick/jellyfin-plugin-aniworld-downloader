@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.6",
+        "changelog": "Development build of queue-captcha at 51861b3. Not a release; it may break.\n\n- show and solve captchas from the queue view",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.6/aniworld-downloader_0.2.2.6.zip",
+        "checksum": "9721e5119a605ffdccf25dfa2bb3a029",
+        "timestamp": "2026-10-23T06:55:28Z"
+      },
+      {
         "version": "0.2.2.5",
         "changelog": "Development build of nav-queue-badge at fe8a749. Not a release; it may break.\n\n- remove the nav entry's download count badge again\n- show the active download count as a badge on the nav entry",
         "targetAbi": "12.2.0.0",
