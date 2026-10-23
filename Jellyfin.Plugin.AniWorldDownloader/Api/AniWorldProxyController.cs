@@ -27,10 +27,14 @@ namespace Jellyfin.Plugin.AniWorldDownloader.Api;
 [Produces(MediaTypeNames.Application.Json)]
 public class AniWorldProxyController : ControllerBase
 {
-    private static readonly string[] _searchTypes = ["all", "anime", "series", "movie"];
+    // "manga" searches MangaFire alone; the rest go through AniWorld's all-sites search
+    private static readonly string[] _searchTypes = ["all", "anime", "series", "movie", "manga"];
 
     // AniWorld's browse lists, see _BROWSE_ROWS in its api_media.py
-    private static readonly string[] _browseLists = ["new-animes", "popular-animes", "new-series", "popular-series", "popular-movies"];
+    private static readonly string[] _browseLists = ["new-animes", "popular-animes", "new-series", "popular-series", "popular-movies", "mangafire-trending"];
+
+    // What AniWorld queues manga with, as language and as provider
+    private const string MangaFire = "MangaFire";
 
     private readonly IAuthorizationContext _authContext;
     private readonly AniWorldClient _aniWorld;
@@ -110,7 +114,12 @@ public class AniWorldProxyController : ControllerBase
 
         if (!_searchTypes.Contains(type))
         {
-            return BadRequest(new JsonObject { ["error"] = "type must be all, anime, series or movie" });
+            return BadRequest(new JsonObject { ["error"] = "type must be all, anime, series, movie or manga" });
+        }
+
+        if (type == "manga")
+        {
+            return Reply(await SearchMangaAsync(keyword, cancellationToken).ConfigureAwait(false));
         }
 
         var body = new JsonObject { ["keyword"] = keyword, ["site"] = "all", ["type"] = type };
@@ -146,8 +155,25 @@ public class AniWorldProxyController : ControllerBase
         {
             Response.StatusCode = StatusCodes.Status400BadRequest;
             await Response.WriteAsJsonAsync(
-                new JsonObject { ["error"] = string.IsNullOrEmpty(keyword) ? "keyword is required" : "type must be all, anime, series or movie" },
+                new JsonObject { ["error"] = string.IsNullOrEmpty(keyword) ? "keyword is required" : "type must be all, anime, series, movie or manga" },
                 cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (type == "manga")
+        {
+            // One site, so one answer, sent the way the page reads the stream
+            var manga = await SearchMangaAsync(keyword, cancellationToken).ConfigureAwait(false);
+            if (manga.Status >= 400)
+            {
+                Response.StatusCode = manga.Status;
+                await Response.WriteAsJsonAsync(manga.Json, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            Response.ContentType = "application/x-ndjson; charset=utf-8";
+            var line = new JsonObject { ["site"] = "mangafire", ["results"] = manga.Json?["results"]?.DeepClone() ?? new JsonArray(), ["pending"] = new JsonArray() };
+            await Response.WriteAsync(line.ToJsonString() + "\n" + new JsonObject { ["done"] = true }.ToJsonString() + "\n", cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -280,7 +306,9 @@ public class AniWorldProxyController : ControllerBase
         }
 
         var reply = await _aniWorld.SendAsync(HttpMethod.Get, list, null, null, cancellationToken).ConfigureAwait(false);
-        if (reply.Json?["results"] is JsonArray results && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        // A manga shares its title with the anime, which is no reason to badge it
+        if (!list.StartsWith("mangafire", StringComparison.Ordinal)
+            && reply.Json?["results"] is JsonArray results && await GetCallerAsync().ConfigureAwait(false) is { } caller)
         {
             foreach (var result in results.OfType<JsonObject>())
             {
@@ -309,7 +337,7 @@ public class AniWorldProxyController : ControllerBase
 
         var query = new Dictionary<string, string?> { ["url"] = url };
         var reply = await _aniWorld.SendAsync(HttpMethod.Get, "series", query, null, cancellationToken).ConfigureAwait(false);
-        if (reply.Json is JsonObject series && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        if (!IsManga(url) && reply.Json is JsonObject series && await GetCallerAsync().ConfigureAwait(false) is { } caller)
         {
             MarkLibraryItem(series, caller);
         }
@@ -416,18 +444,24 @@ public class AniWorldProxyController : ControllerBase
         }
 
         var config = Plugin.Instance!.Configuration;
+        var manga = IsManga(request.SeriesUrl);
         // Only a missing value gets the default: some sites have no hoster
-        // to pick, and AniWorld expects an empty one for them
-        var language = request.Language ?? config.DefaultLanguage;
-        var provider = request.Provider ?? config.DefaultProvider;
+        // to pick, and AniWorld expects an empty one for them. Manga have
+        // neither, and AniWorld knows them by "MangaFire" in both.
+        var language = manga ? MangaFire : request.Language ?? config.DefaultLanguage;
+        var provider = manga ? MangaFire : request.Provider ?? config.DefaultProvider;
         var title = Pick(request.Title, "Unknown");
+        var seriesUrl = request.SeriesUrl ?? string.Empty;
         var body = new JsonObject
         {
-            ["episodes"] = new JsonArray(request.Episodes.Select(e => (JsonNode?)JsonValue.Create(e)).ToArray()),
+            // A manga entry is a whole chapter or volume of its series
+            ["episodes"] = new JsonArray(request.Episodes.Select(e => manga
+                ? new JsonObject { ["url"] = e, ["series_url"] = seriesUrl }
+                : (JsonNode?)JsonValue.Create(e)).ToArray()),
             ["language"] = language,
             ["provider"] = provider,
             ["title"] = title,
-            ["series_url"] = request.SeriesUrl ?? string.Empty,
+            ["series_url"] = seriesUrl,
         };
         var reply = await _aniWorld.SendAsync(HttpMethod.Post, "download", null, body, cancellationToken).ConfigureAwait(false);
 
@@ -438,9 +472,10 @@ public class AniWorldProxyController : ControllerBase
             _owners.Add(id, caller.User.Id);
 
             var episodes = request.Episodes.Length;
-            var details = string.IsNullOrEmpty(provider) ? language : $"{language}, {provider}";
+            var unit = manga ? (episodes == 1 ? "chapter or volume" : "chapters or volumes") : episodes == 1 ? "episode" : "episodes";
+            var details = manga ? "Manga" : string.IsNullOrEmpty(provider) ? language : $"{language}, {provider}";
             await _activityManager.CreateAsync(new ActivityLog(
-                $"AniWorld: {caller.User.Username} started a download of {title}: {episodes} {(episodes == 1 ? "episode" : "episodes")}",
+                $"AniWorld: {caller.User.Username} started a download of {title}: {episodes} {unit}",
                 "AniWorldDownloader",
                 caller.User.Id)
             {
@@ -545,6 +580,28 @@ public class AniWorldProxyController : ControllerBase
 
     private static string Pick(string? value, string fallback)
         => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static bool IsManga(string? url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && uri.Host.Replace("www.", string.Empty, StringComparison.OrdinalIgnoreCase).Equals("mangafire.to", StringComparison.OrdinalIgnoreCase);
+
+    // MangaFire through AniWorld's one-site search, tagged like the
+    // all-sites hits so the page can show them the same way
+    private async Task<AniWorldReply> SearchMangaAsync(string keyword, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["keyword"] = keyword, ["site"] = "mangafire" };
+        var reply = await _aniWorld.SendAsync(HttpMethod.Post, "search", null, body, cancellationToken).ConfigureAwait(false);
+        if (reply.Json?["results"] is JsonArray results)
+        {
+            foreach (var result in results.OfType<JsonObject>())
+            {
+                result["site"] = "mangafire";
+                result["type"] = "manga";
+            }
+        }
+
+        return reply;
+    }
 
     private async Task<ActionResult> ForwardGet(
         string path,

@@ -22,7 +22,9 @@
         { id: 'all', label: 'All' },
         { id: 'anime', label: 'Anime' },
         { id: 'series', label: 'Series' },
-        { id: 'movie', label: 'Movies' }
+        { id: 'movie', label: 'Movies' },
+        // Only MangaFire, so not part of "All"
+        { id: 'manga', label: 'Manga' }
     ];
 
     var SITE_NAMES = {
@@ -33,7 +35,8 @@
         moflix: 'Moflix',
         megakino: 'MegaKino',
         filmpalast: 'FilmPalast',
-        filmo: 'Filmo'
+        filmo: 'Filmo',
+        mangafire: 'MangaFire'
     };
 
     var LANGUAGE_SHORT = {
@@ -154,6 +157,17 @@
         return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+    // A <textarea> parses entities and nothing else: no tags, no scripts
+    function decodeEntities(text) {
+        if (text.indexOf('&') < 0) {
+            return text;
+        }
+
+        var box = document.createElement('textarea');
+        box.innerHTML = text;
+        return box.value;
     }
 
     function el(html) {
@@ -367,7 +381,8 @@
             '<button type="button" class="raised emby-button aniworld-open-queue">Queue</button></div>' +
             '<form class="aniworld-searchbar">' +
             '<input type="search" class="emby-input" name="q" autocomplete="off" enterkeyhint="search" ' +
-            'placeholder="Search anime, series and movies" aria-label="Search" value="' + escapeHtml(keyword) + '">' +
+            'placeholder="' + (tab === 'manga' ? 'Search manga' : 'Search anime, series and movies') + '" ' +
+            'aria-label="Search" value="' + escapeHtml(keyword) + '">' +
             '<button type="submit" class="raised button-submit emby-button" style="margin:0;min-height:2.75em">Search</button>' +
             '</form>' +
             '<div class="aniworld-tabs" role="tablist">' +
@@ -551,7 +566,8 @@
         { id: 'popular-animes', label: 'Popular anime', tabs: ['all', 'anime'] },
         { id: 'new-series', label: 'New series', tabs: ['all', 'series'] },
         { id: 'popular-series', label: 'Popular series', tabs: ['all', 'series'] },
-        { id: 'popular-movies', label: 'Popular movies', tabs: ['all', 'movie'] }
+        { id: 'popular-movies', label: 'Popular movies', tabs: ['all', 'movie'] },
+        { id: 'mangafire-trending', label: 'Trending manga', tabs: ['manga'] }
     ];
 
     // AniWorld's lists don't say which site a title is on; the link does
@@ -743,7 +759,8 @@
             inner.querySelector('.aniworld-meta').innerHTML = meta.join('');
             var description = inner.querySelector('.aniworld-description');
             var more = inner.querySelector('.aniworld-more');
-            description.textContent = series.description || '';
+            // MangaFire's descriptions come with HTML entities in them
+            description.textContent = decodeEntities(series.description || '');
             // Only offer "More" when the four lines actually cut something off
             more.hidden = description.scrollHeight <= description.clientHeight + 2;
             more.addEventListener('click', function () {
@@ -789,15 +806,120 @@
             }
 
             var seasons = reply.seasons || [];
+            var manga = siteFromUrl(url) === 'mangafire';
             if (!seasons.length) {
-                status.textContent = 'No seasons found.';
+                status.textContent = manga ? 'No chapters found.' : 'No seasons found.';
                 return;
             }
 
-            new DetailState(inner, url, seasons, info, params.get('missing') === '1').start();
+            if (manga) {
+                renderChapters(inner, url, seasons, info);
+            } else {
+                new DetailState(inner, url, seasons, info, params.get('missing') === '1').start();
+            }
         }, function (err) {
             status.textContent = 'Could not load the seasons: ' + err.message;
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Manga chapters
+    // ------------------------------------------------------------------
+    // AniWorld lists a manga's chapters, or its volumes when it saves CBZ or
+    // EPUB, as seasons. Each is ticked and downloaded whole; there is no
+    // language or hoster to pick.
+    function renderChapters(inner, seriesUrl, items, info) {
+        // MangaFire lists official and fan releases of the same chapter, under
+        // one link. AniWorld downloads the official ones when there are any,
+        // so only those are offered then, once each.
+        var official = items.some(function (item) { return item.chapter_type === 'official'; });
+        var seen = {};
+        items = items.filter(function (item) {
+            if ((official && item.chapter_type !== 'official' && !item.is_volume) || seen[item.url]) {
+                return false;
+            }
+
+            seen[item.url] = true;
+            return true;
+        });
+
+        var list = inner.querySelector('.aniworld-episodes');
+        var actions = inner.querySelector('.aniworld-actions');
+        inner.querySelector('.aniworld-status').textContent = '';
+
+        list.innerHTML = items.map(function (item, i) {
+            var heading = (item.is_volume ? 'Volume ' : 'Chapter ') + item.season_number;
+            var href = externalHref(item.url);
+            var link = href
+                ? '<a class="aniworld-episode-link" href="' + escapeHtml(href) +
+                '" target="_blank" rel="noopener noreferrer" title="Open on MangaFire" aria-label="' +
+                escapeHtml(heading + ': open on MangaFire') + '">' + EXTERNAL_ICON + '</a>'
+                : '';
+            return '<label class="aniworld-episode listItem">' +
+                '<input type="checkbox" data-index="' + i + '"' + (items.length === 1 ? ' checked' : '') + '>' +
+                '<div class="aniworld-episode-text"><div class="aniworld-episode-title">' + escapeHtml(heading) + '</div></div>' +
+                link + '</label>';
+        }).join('');
+
+        if (!info.canDownload) {
+            actions.innerHTML = '<div class="aniworld-status">You can browse here, but an admin has to allow you to download.</div>';
+            return;
+        }
+
+        actions.innerHTML =
+            '<button type="button" class="raised emby-button aniworld-select-all">Select all</button>' +
+            '<button type="button" class="raised button-submit emby-button aniworld-download" disabled>Download</button>';
+        var toggle = actions.querySelector('.aniworld-select-all');
+        var button = actions.querySelector('.aniworld-download');
+
+        function boxes() {
+            return Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]'));
+        }
+
+        function selected() {
+            return boxes().filter(function (b) { return b.checked; }).map(function (b) {
+                return items[Number(b.getAttribute('data-index'))];
+            });
+        }
+
+        function unit(count) {
+            var volumes = selected().every(function (item) { return item.is_volume; });
+            return volumes
+                ? (count === 1 ? 'volume' : 'volumes')
+                : (count === 1 ? 'chapter' : 'chapters');
+        }
+
+        function update() {
+            var count = selected().length;
+            button.disabled = count === 0;
+            button.textContent = count ? 'Download ' + count + ' ' + unit(count) : 'Download';
+            toggle.style.display = items.length > 1 ? '' : 'none';
+            toggle.textContent = boxes().every(function (b) { return b.checked; }) ? 'Select none' : 'Select all';
+        }
+
+        list.addEventListener('change', update);
+        toggle.addEventListener('click', function () {
+            var all = boxes().every(function (b) { return b.checked; });
+            boxes().forEach(function (b) { b.checked = !all; });
+            update();
+        });
+        button.addEventListener('click', function () {
+            var chosen = selected();
+            var title = inner.querySelector('h1').textContent;
+            var what = chosen.length + ' ' + unit(chosen.length);
+            button.disabled = true;
+            api('POST', 'Download', {
+                Episodes: chosen.map(function (item) { return item.url; }),
+                Title: title,
+                SeriesUrl: seriesUrl
+            }).then(function () {
+                toast('Added ' + what + ' of ' + title + ' to the queue');
+                boxes().forEach(function (b) { b.checked = false; });
+            }, function (err) {
+                toast('Download failed: ' + err.message);
+            }).then(update);
+        });
+        update();
     }
 
     // ------------------------------------------------------------------
@@ -986,13 +1108,16 @@
             list.innerHTML = items.map(function (item) {
                 var label = STATUS_LABELS[item.status] || item.status;
                 var parts = [label];
+                // A manga's parts are chapters or volumes; the queue doesn't say which
+                var manga = item.provider === 'MangaFire';
+                var one = manga ? 'part' : 'episode';
                 if (item.total_episodes) {
                     parts.push(item.status === 'running'
-                        ? 'episode ' + Math.max(1, item.current_episode) + ' of ' + item.total_episodes
-                        : item.total_episodes + (item.total_episodes === 1 ? ' episode' : ' episodes'));
+                        ? one + ' ' + Math.max(1, item.current_episode) + ' of ' + item.total_episodes
+                        : item.total_episodes + ' ' + one + (item.total_episodes === 1 ? '' : 's'));
                 }
-                parts.push(item.language);
-                if (item.provider) {
+                parts.push(manga ? 'Manga' : item.language);
+                if (item.provider && !manga) {
                     parts.push(item.provider);
                 }
 

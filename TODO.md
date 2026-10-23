@@ -216,6 +216,23 @@ things users already run into.
   start a run from Jellyfin.
 - **Size:** M
 
+### [x] 4.4 Manga
+
+- **Why:** AniWorld Downloader can fetch manga from MangaFire, but only from
+  its own web UI, and they landed in the anime folder.
+- **Where:** The search, browse lists, detail page and queue in
+  `Web/client.js`; `Search`, `SearchStream`, `Browse`, `GetSeries` and
+  `Download` in `Api/AniWorldProxyController.cs`; `DownloadWatcher`. In
+  AniWorld Downloader: `ANIWORLD_MANGA_DOWNLOAD_PATH`.
+- **How:** A **Manga** tab searches MangaFire alone and shows its trending
+  list. A title lists its chapters, or its volumes when AniWorld saves CBZ or
+  EPUB (`ANIWORLD_MANGAFIRE_FORMAT`), to tick and download whole. Manga are
+  never matched against the library by title, since they share it with the
+  anime, so a finished manga always ends in a full library scan.
+- **Done when:** A manga downloaded from Jellyfin lands in the manga folder
+  and shows up in a Jellyfin **Books** library on that folder.
+- **Size:** M
+
 ## 5. Library matching
 
 ### [ ] 5.1 Manual title links

@@ -39,6 +39,10 @@ public class DownloadWatcher : BackgroundService
     private readonly ILogger<DownloadWatcher> _logger;
     private readonly Dictionary<int, string> _lastStatus = new();
     private readonly PendingScan _pendingScan = new();
+
+    // Finished manga waiting for that scan. A manga shares its title with the
+    // anime, so finding the title in the library says nothing about where it went.
+    private readonly HashSet<string> _pendingManga = new(StringComparer.Ordinal);
     private readonly ConnectionState _connection = new();
     private bool _primed;
 
@@ -164,13 +168,20 @@ public class DownloadWatcher : BackgroundService
     {
         var title = item["title"]?.GetValue<string>() ?? "A download";
         var episodes = item["total_episodes"]?.GetValue<int>() ?? 0;
+        // A manga's parts are chapters or volumes; the queue doesn't say which
+        var manga = item["provider"]?.GetValue<string>() == "MangaFire";
+        var unit = manga ? "part" : "episode";
         var text = done
-            ? $"{title}: {episodes} {(episodes == 1 ? "episode" : "episodes")} downloaded"
+            ? $"{title}: {episodes} {unit}{(episodes == 1 ? string.Empty : "s")} downloaded"
             : $"{title}: the download failed";
 
         if (done && Plugin.Instance?.Configuration.ScanAfterDownload != false)
         {
             _pendingScan.Add(title, DateTime.UtcNow);
+            if (manga)
+            {
+                _pendingManga.Add(title);
+            }
         }
 
         var owner = _owners.Take(id);
@@ -229,6 +240,15 @@ public class DownloadWatcher : BackgroundService
     {
         if (_pendingScan.TakeIfDue(busy, DateTime.UtcNow) is not { } titles)
         {
+            return;
+        }
+
+        var manga = titles.Where(_pendingManga.Contains).ToList();
+        _pendingManga.Clear();
+        if (manga.Count > 0)
+        {
+            _logger.LogInformation("AniWorld Downloader: new manga ({Titles}), scanning all libraries", string.Join(", ", manga));
+            _libraryManager.QueueLibraryScan();
             return;
         }
 
