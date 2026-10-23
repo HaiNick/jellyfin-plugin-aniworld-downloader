@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.10",
+        "changelog": "Development build of queue-captcha at ea4420b. Not a release; it may break.\n\n- remove the captcha viewer again\n- drop the Kinox \"solve on the site\" link\n- link Kinox captchas from the queue, and give the plugin card a logo\n- show and solve captchas from the queue view",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.10/aniworld-downloader_0.2.2.10.zip",
+        "checksum": "f109534bb4c56df7c52d24530c6e6d67",
+        "timestamp": "2026-10-23T08:10:15Z"
+      },
+      {
         "version": "0.2.2.9",
         "changelog": "Development build of queue-captcha at 256711f. Not a release; it may break.\n\n- drop the Kinox \"solve on the site\" link\n- link Kinox captchas from the queue, and give the plugin card a logo\n- show and solve captchas from the queue view",
         "targetAbi": "12.2.0.0",
