@@ -82,7 +82,7 @@ things users already run into.
 
 ## 2. Queue and downloads
 
-### [ ] 2.1 Show and solve captchas in the queue
+### [x] 2.1 Show and solve captchas in the queue
 
 - **Why:** Some hosters ask for a captcha. The downloader can show it, but
   `client.js` never asks, so in Jellyfin the download just looks stuck.
