@@ -28,6 +28,8 @@ PACKAGE = {
     ),
     "owner": "HaiNick",
     "category": "General",
+    # The card in Jellyfin's plugin list; Jellyfin downloads it on install
+    "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png",
 }
 TARGET_ABI = "12.2.0.0"
 
