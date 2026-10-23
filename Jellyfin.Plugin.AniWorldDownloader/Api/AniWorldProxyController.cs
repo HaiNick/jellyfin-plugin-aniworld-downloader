@@ -8,10 +8,12 @@ using Jellyfin.Plugin.AniWorldDownloader.AniWorld;
 using Jellyfin.Plugin.AniWorldDownloader.Library;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
+using MediaBrowser.Model.Activity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.AniWorldDownloader.Api;
 
@@ -35,6 +37,7 @@ public class AniWorldProxyController : ControllerBase
     private readonly LibraryMatcher _library;
     private readonly DownloadOwners _owners;
     private readonly ILibraryManager _libraryManager;
+    private readonly IActivityManager _activityManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniWorldProxyController"/> class.
@@ -44,18 +47,21 @@ public class AniWorldProxyController : ControllerBase
     /// <param name="library">Matches titles against the Jellyfin library.</param>
     /// <param name="owners">Who queued which download, for the "done" message.</param>
     /// <param name="libraryManager">The library manager.</param>
+    /// <param name="activityManager">The activity log.</param>
     public AniWorldProxyController(
         IAuthorizationContext authContext,
         AniWorldClient aniWorld,
         LibraryMatcher library,
         DownloadOwners owners,
-        ILibraryManager libraryManager)
+        ILibraryManager libraryManager,
+        IActivityManager activityManager)
     {
         _authContext = authContext;
         _aniWorld = aniWorld;
         _library = library;
         _owners = owners;
         _libraryManager = libraryManager;
+        _activityManager = activityManager;
     }
 
     /// <summary>
@@ -410,23 +416,37 @@ public class AniWorldProxyController : ControllerBase
         }
 
         var config = Plugin.Instance!.Configuration;
+        // Only a missing value gets the default: some sites have no hoster
+        // to pick, and AniWorld expects an empty one for them
+        var language = request.Language ?? config.DefaultLanguage;
+        var provider = request.Provider ?? config.DefaultProvider;
+        var title = Pick(request.Title, "Unknown");
         var body = new JsonObject
         {
             ["episodes"] = new JsonArray(request.Episodes.Select(e => (JsonNode?)JsonValue.Create(e)).ToArray()),
-            // Only a missing value gets the default: some sites have no hoster
-            // to pick, and AniWorld expects an empty one for them
-            ["language"] = request.Language ?? config.DefaultLanguage,
-            ["provider"] = request.Provider ?? config.DefaultProvider,
-            ["title"] = Pick(request.Title, "Unknown"),
+            ["language"] = language,
+            ["provider"] = provider,
+            ["title"] = title,
             ["series_url"] = request.SeriesUrl ?? string.Empty,
         };
         var reply = await _aniWorld.SendAsync(HttpMethod.Post, "download", null, body, cancellationToken).ConfigureAwait(false);
 
-        // So the "done" message goes to whoever asked for it
         if (reply.Json?["queue_id"] is JsonValue queueId && queueId.TryGetValue<int>(out var id)
             && await GetCallerAsync().ConfigureAwait(false) is { } caller)
         {
+            // So the "done" message goes to whoever asked for it
             _owners.Add(id, caller.User.Id);
+
+            var episodes = request.Episodes.Length;
+            var details = string.IsNullOrEmpty(provider) ? language : $"{language}, {provider}";
+            await _activityManager.CreateAsync(new ActivityLog(
+                $"AniWorld: {caller.User.Username} started a download of {title}: {episodes} {(episodes == 1 ? "episode" : "episodes")}",
+                "AniWorldDownloader",
+                caller.User.Id)
+            {
+                ShortOverview = "Download started: " + details,
+                LogSeverity = LogLevel.Information,
+            }).ConfigureAwait(false);
         }
 
         return Reply(reply);

@@ -68,7 +68,7 @@ things users already run into.
   entry.
 - **Size:** S
 
-### [ ] 1.4 Log who started a download
+### [x] 1.4 Log who started a download
 
 - **Why:** The Activity log only has an entry when a download finishes or
   fails. An admin can't see who queued what, or when.
