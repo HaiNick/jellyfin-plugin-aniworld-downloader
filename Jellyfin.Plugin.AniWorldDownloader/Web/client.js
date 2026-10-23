@@ -55,11 +55,6 @@
     // GET /Info, once per page load
     var infoPromise = null;
 
-    // Queued plus running downloads, for the badge on the nav entry
-    var activeDownloads = 0;
-    var BADGE_POLL_MS = 30000;
-    var badgeTimer = null;
-
     // ------------------------------------------------------------------
     // Routing
     // ------------------------------------------------------------------
@@ -299,12 +294,7 @@
             '.aniworld-toast{position:fixed;left:50%;bottom:1.5em;transform:translate(-50%,2em);opacity:0;pointer-events:none;',
             'max-width:calc(100% - 2em);padding:.85em 1.25em;border-radius:.3em;background:#303030;color:#fff;',
             'box-shadow:0 .2em .8em rgba(0,0,0,.4);transition:opacity .2s,transform .2s;z-index:9999}',
-            '.aniworld-toast-visible{opacity:1;transform:translate(-50%,0)}',
-            // Outside our page, so no theme accent to read; Jellyfin's own blue
-            '.aniworld-nav-badge-host{position:relative}',
-            '.aniworld-nav-badge{position:absolute;top:-.5em;right:-.7em;min-width:1.6em;height:1.6em;padding:0 .35em;box-sizing:border-box;' +
-            'border-radius:.8em;font-size:.6rem;font-weight:600;line-height:1.6em;text-align:center;background:#00a4dc;color:#fff;pointer-events:none}',
-            '.aniworld-nav-badge[hidden]{display:none}'
+            '.aniworld-toast-visible{opacity:1;transform:translate(-50%,0)}'
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -341,15 +331,6 @@
             setDownloadIcon(svg);
         }
 
-        // On the icon's corner, like a phone's unread count. The badge shows on
-        // every page, so its styles can't wait for ours to open.
-        addStyles();
-        var badgeHost = svg ? svg.parentNode : link;
-        badgeHost.classList.add('aniworld-nav-badge-host');
-        var badge = el('<span class="aniworld-nav-badge" hidden></span>');
-        badgeHost.appendChild(badge);
-        drawBadge(badge);
-
         // Replace the "Favorites" text, wherever MUI put it.
         var walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
         var node;
@@ -370,34 +351,6 @@
                 addNavEntry(links[i]);
             }
         }
-
-        if (!badgeTimer && document.querySelector('[' + MARK + ']')) {
-            refreshBadges();
-            badgeTimer = window.setInterval(refreshBadges, BADGE_POLL_MS);
-            document.addEventListener('visibilitychange', refreshBadges);
-        }
-    }
-
-    function drawBadge(badge) {
-        badge.textContent = activeDownloads > 99 ? '99+' : String(activeDownloads);
-        badge.hidden = activeDownloads === 0;
-    }
-
-    // Asks only while the tab is visible and the nav entry is on screen,
-    // so a tab left open in the background doesn't keep polling
-    function refreshBadges() {
-        if (document.hidden || !document.querySelector('[' + MARK + ']')) {
-            return;
-        }
-
-        api('GET', 'Queue/Counts').then(function (reply) {
-            activeDownloads = (reply && reply.counts && reply.counts.active) || 0;
-        }, function () {
-            // A stale count is not worth a message; the queue page shows the error
-            activeDownloads = 0;
-        }).then(function () {
-            document.querySelectorAll('.aniworld-nav-badge').forEach(drawBadge);
-        });
     }
 
     // ------------------------------------------------------------------
@@ -1069,7 +1022,6 @@
                     button.disabled = true;
                     api('POST', 'Queue/' + button.getAttribute('data-id') + '/Cancel').then(function () {
                         toast('Cancelled');
-                        refreshBadges();
                     }, function (err) {
                         button.disabled = false;
                         toast('Cancel failed: ' + err.message);
@@ -1358,7 +1310,6 @@
         }).then(function () {
             toast('Added ' + episodes.length + (episodes.length === 1 ? ' episode' : ' episodes') + ' of ' + title + ' to the queue');
             self.boxes().forEach(function (b) { b.checked = false; });
-            refreshBadges();
         }, function (err) {
             toast('Download failed: ' + err.message);
         }).then(function () {

@@ -376,22 +376,6 @@ public class AniWorldProxyController : ControllerBase
             quiet: true);
 
     /// <summary>
-    /// How many queue items are in each status, for the nav entry's badge.
-    /// </summary>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>{counts: {queued, running, active, ...}}.</returns>
-    [HttpGet("Queue/Counts")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public Task<ActionResult> GetQueueCounts(CancellationToken cancellationToken)
-        => ForwardGet(
-            "queue/counts",
-            new(),
-            cancellationToken,
-            requireUrl: false,
-            // Every open Jellyfin tab asks; the download watcher reports an outage once
-            quiet: true);
-
-    /// <summary>
     /// Cancels a queued or running download. Needs the download permission.
     /// </summary>
     /// <param name="id">The queue item.</param>
