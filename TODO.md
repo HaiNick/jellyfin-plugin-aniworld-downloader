@@ -118,7 +118,7 @@ things users already run into.
   view refreshes afterwards.
 - **Size:** M
 
-### [ ] 2.3 Active-download count in the nav entry
+### [x] 2.3 Active-download count in the nav entry
 
 - **Why:** You can't see from anywhere else in Jellyfin that something is
   downloading.
