@@ -1025,14 +1025,6 @@
                         'Solve captcha</button>';
                 }
 
-                // Kinox shows its captcha to every visitor, on its own site
-                var siteCaptcha = info.canDownload ? externalHref(siteCaptchaUrl(item)) : '';
-                if (siteCaptcha) {
-                    parts.push('the site wants a captcha first');
-                    buttons += '<a class="raised emby-button" href="' + escapeHtml(siteCaptcha) + '" target="_blank" rel="noopener noreferrer">' +
-                        'Solve captcha on the site</a>';
-                }
-
                 if (info.canDownload && (item.status === 'queued' || item.status === 'running')) {
                     buttons += '<button type="button" class="raised emby-button aniworld-cancel" data-id="' + item.id + '">Cancel</button>';
                 }
@@ -1165,24 +1157,6 @@
         }
 
         poll();
-    }
-
-    // AniWorld keeps an item's errors as a JSON list; one that a captcha on the
-    // site itself caused carries the page to solve it on
-    function siteCaptchaUrl(item) {
-        var errors = item.errors;
-        if (typeof errors === 'string') {
-            try {
-                errors = JSON.parse(errors || '[]');
-            } catch (e) {
-                errors = [];
-            }
-        }
-
-        var hit = (Array.isArray(errors) ? errors : []).filter(function (entry) {
-            return entry && entry.captcha_url;
-        })[0];
-        return hit ? hit.captcha_url : '';
     }
 
     // An <img> can't send the Jellyfin login, so the picture comes as a blob
