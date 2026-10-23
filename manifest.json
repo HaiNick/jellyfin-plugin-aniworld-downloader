@@ -6,6 +6,7 @@
     "description": "Adds an AniWorld page to the Jellyfin web client and the official Android and iOS apps. It searches AniWorld Downloader, queues downloads into your libraries and can keep series up to date with Auto-Sync.",
     "owner": "HaiNick",
     "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png",
     "versions": [
       {
         "version": "0.2.2.0",
