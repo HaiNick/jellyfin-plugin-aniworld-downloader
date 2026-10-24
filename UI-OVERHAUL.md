@@ -60,7 +60,7 @@ Checked in AniWorld Downloader's code and in real replies:
 
 ## Items
 
-### [ ] 1. Title page like Jellyfin's item page
+### [x] 1. Title page like Jellyfin's item page
 
 - **Why:** The title page is a poster next to plain episode rows.
 - **Where:** `renderDetail`, `DetailState.renderEpisodes`, and `addStyles`
@@ -177,3 +177,14 @@ Checked in AniWorld Downloader's code and in real replies:
     on `<body>`, `layout-mobile` in the phone frame, and answers
     `Shows/{id}/Episodes` from the fixtures (`capture.js` saves it).
   - Next: check on the server with SleekFin.
+- 2026-10-24: Item 1 checked on the server with SleekFin (dev build
+  0.2.2.16), at desktop width and in a 390px frame with `layout-mobile`.
+  - SleekFin moves a bar from the header to the bottom of the screen on
+    phones, and it covered the sticky download bar. `placeAboveBottomBars`
+    now measures fixed header elements in the lower half of the screen and
+    lifts the download bar above them. Tried in the 390px frame; ships in
+    the next dev build.
+  - An episode without an image gets Jellyfin's default card background,
+    which SleekFin doesn't restyle (a bright blue box). Kept, since Jellyfin
+    shows the same.
+  - Next: item 4 (Queue and Auto-Sync).

@@ -374,7 +374,7 @@
             P + ' .aniworld-episode{cursor:pointer}',
             P + ' .aniworld-episode .emby-checkbox-label{flex:none;width:auto;margin:0 .25em 0 .5em}',
             // Kept above the episode list; the theme's page colour behind it
-            P + ' .aniworld-actions{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:.5em 1em;' +
+            P + ' .aniworld-actions{position:sticky;bottom:var(--aniworld-bottom-offset,0px);z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:.5em 1em;' +
             'padding:.75em 0;background:var(--aniworld-page-background,#101010)}',
             P + ' .aniworld-actions .emby-button{margin:0}',
             P + ' .aniworld-actions-count{flex:1;min-width:10em}',
@@ -1948,6 +1948,25 @@
         return '';
     }
 
+    // Themes can pin a bar from the header to the bottom of the screen
+    // (SleekFin's tab bar on phones), which would cover the download bar.
+    // Measure how far up such bars reach so ours stays above them.
+    function placeAboveBottomBars(page) {
+        var height = window.innerHeight;
+        var offset = 0;
+        var nodes = document.querySelectorAll('.skinHeader *, header *');
+        for (var i = 0; i < nodes.length; i++) {
+            var rect = nodes[i].getBoundingClientRect();
+            if (rect.height && rect.top > height / 2 && rect.bottom <= height + 1 &&
+                window.getComputedStyle(nodes[i]).position === 'fixed') {
+                offset = Math.max(offset, height - rect.top);
+            }
+        }
+
+        // A little air between the two bars
+        page.style.setProperty('--aniworld-bottom-offset', (offset ? Math.ceil(offset) + 8 : 0) + 'px');
+    }
+
     function setTitle(title) {
         // Only when it differs: writing <title> would wake the observer again.
         if (document.title !== title) {
@@ -2026,6 +2045,13 @@
 
         renderedHash = hash;
         window.scrollTo(0, 0);
+        placeAboveBottomBars(page);
+        // Themes mount their bars late, so measure once more
+        window.setTimeout(function () {
+            if (page.isConnected) {
+                placeAboveBottomBars(page);
+            }
+        }, 1000);
         page.querySelector('.aniworld-build').textContent =
             'client.js: ' + (window.AniWorldDownloaderBuild || 'unknown');
 
@@ -2076,5 +2102,11 @@
     // React re-renders the bar and pages often, so keep checking.
     new MutationObserver(update).observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener('hashchange', update);
+    window.addEventListener('resize', function () {
+        var page = document.getElementById(PAGE_ID);
+        if (page) {
+            placeAboveBottomBars(page);
+        }
+    });
     update();
 })();
