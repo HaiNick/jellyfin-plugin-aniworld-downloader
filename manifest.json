@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.12",
+        "changelog": "Development build of autosync-page at 71c477b. Not a release; it may break.\n\n- add an Auto-Sync page for admins to see and manage tracked series",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.12/aniworld-downloader_0.2.2.12.zip",
+        "checksum": "8f8cb72f468d11521a8728a105a2e982",
+        "timestamp": "2026-10-24T13:04:33Z"
+      },
+      {
         "version": "0.2.2.11",
         "changelog": "Development build of manga at 466b8e0. Not a release; it may break.\n\n- search and download manga from MangaFire",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.1.3/aniworld-downloader_0.2.1.3.zip",
         "checksum": "f074b85b4ab0460bff1b3467837d3e23",
         "timestamp": "2026-10-22T06:56:46Z"
-      },
-      {
-        "version": "0.2.1.2",
-        "changelog": "Development build of claude/nifty-fermi-ht0g2i at 8d594d5. Not a release; it may break.\n\n- log the queue page's failed polls quietly\n- build every branch push as a dev version and list it in a dev manifest\n- scan the library after downloads, keep download owners across restarts, and log outages once\n- note that queue items carry no target folder\n- add a to-do list of plugin ideas",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.1.2/aniworld-downloader_0.2.1.2.zip",
-        "checksum": "52ffc749fac08f355cc596c165164af9",
-        "timestamp": "2026-10-22T06:51:32Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
