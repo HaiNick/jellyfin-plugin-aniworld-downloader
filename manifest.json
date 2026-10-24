@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.14",
+        "changelog": "Development build of autosync-page at e7ef230. Not a release; it may break.\n\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.14/aniworld-downloader_0.2.2.14.zip",
+        "checksum": "42061bdc701a298ab72831d2d1495022",
+        "timestamp": "2026-10-24T13:41:44Z"
+      },
+      {
         "version": "0.2.2.13",
         "changelog": "Development build of autosync-page at c48b218. Not a release; it may break.\n\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.5/aniworld-downloader_0.2.2.5.zip",
         "checksum": "5a1e7df29682f548bf39b94a4dffcecc",
         "timestamp": "2026-10-23T06:44:04Z"
-      },
-      {
-        "version": "0.2.2.4",
-        "changelog": "Development build of nav-queue-badge at 8d25386. Not a release; it may break.\n\n- show the active download count as a badge on the nav entry",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.4/aniworld-downloader_0.2.2.4.zip",
-        "checksum": "63f70793e806f87c08093c3cf3e06900",
-        "timestamp": "2026-10-23T06:36:55Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
