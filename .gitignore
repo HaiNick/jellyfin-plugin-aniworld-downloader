@@ -4,3 +4,6 @@ obj/
 .idea/
 artifacts/
 *.user
+
+# Real replies from your own server, made with dev/capture.js
+dev/fixtures.js

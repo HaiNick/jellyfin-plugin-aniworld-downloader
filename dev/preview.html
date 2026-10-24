@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<!--
+    Shows the plugin page without Jellyfin or a build: loads Web/client.js
+    straight from the repo and answers its calls from dev/fixtures.js.
+    Change client.js, then reload this page.
+
+    Serve the repo root, for example "python -m http.server 8765", and open
+    http://localhost:8765/dev/preview.html. Make fixtures.js with capture.js.
+    Posters and Jellyfin's styles come from the server that made the fixtures,
+    so that server has to be reachable. Nothing here reaches AniWorld: saves,
+    downloads and sync runs only change this page's copy of the data.
+-->
+<html lang="en" dir="ltr" class="layout-desktop">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AniWorld preview</title>
+    <script src="fixtures.js"></script>
+    <script>
+        (function () {
+            var fixtures = window.ANIWORLD_FIXTURES;
+            if (!fixtures) {
+                return;
+            }
+
+            // jellyfin-web's own styles, so the page looks like it does there.
+            // The hashed names change with a Jellyfin update: copy the new ones
+            // from the <link> tags of the real page.
+            [
+                'web/1133.03edf3bb7ee048ee10be.css',
+                'web/main.jellyfin.d0fe7ebed50c35511f89.css',
+                'web/78701.1521101b7f45094b7ce3.css',
+                'web/search.d8744ed84b1a641aee12.css',
+                'web/25348.10043daf2671fc8859af.css',
+                'web/73560.49e7c92878ed0bb4fad6.css',
+                'web/14245.f517756c675c2040ffba.css',
+                'web/91737.46d2c499ae1164063e43.css',
+                'web/32721.bfde69083a6ae513ba97.css',
+                'web/68603.bfde69083a6ae513ba97.css',
+                'web/69881.85d5c8ac3936b68e702e.css',
+                'web/76542.033e6959b8ca2bb863d3.css',
+                'web/47472.ead193e1e4096120377c.css',
+                'web/themes/dark/theme.css',
+                'Branding/Css'
+            ].forEach(function (path) {
+                document.write('<link rel="stylesheet" href="' + fixtures.server + '/' + path + '">');
+            });
+        })();
+    </script>
+    <style>
+        body { margin: 0; }
+        .preview-header { display: flex; align-items: center; gap: 1.5em; padding: .9em 1.5em; font: 500 .9em sans-serif; }
+        .preview-header a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .3em; }
+        .preview-header svg { width: 1.2em; height: 1.2em; fill: currentColor; }
+        .preview-tools { position: fixed; right: 1em; bottom: 1em; z-index: 10000; display: flex; flex-wrap: wrap; gap: .4em;
+            max-width: 26em; padding: .6em; border-radius: .4em; background: #000c; color: #fff; font: 12px sans-serif; }
+        .preview-tools button, .preview-tools label { background: #333; color: #fff; border: 0; border-radius: .3em; padding: .45em .7em;
+            font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: .3em; }
+        .preview-tools .preview-note { width: 100%; opacity: .7; }
+        .preview-missing { font: 16px sans-serif; padding: 2em; max-width: 40em; line-height: 1.5; }
+    </style>
+</head>
+<body class="libraryDocument">
+    <div class="preview-frame">
+        <!-- client.js clones the Favorites link into its own nav entry -->
+        <div class="preview-header">
+            <strong>Preview</strong>
+            <a href="#/home?tab=1"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"/></svg><span>Favorites</span></a>
+        </div>
+        <div class="skinBody">
+            <div id="searchPage" class="page libraryPage allLibraryPage noSecondaryNavPage"></div>
+        </div>
+    </div>
+
+    <div class="preview-tools">
+        <button data-route="">Search</button>
+        <button data-route="&q=dragon%20ball">Results</button>
+        <button data-route="&u=">Detail</button>
+        <button data-route="&view=queue">Queue</button>
+        <button data-route="&view=autosync">Auto-Sync</button>
+        <label><input type="checkbox" class="preview-phone-toggle"> Phone</label>
+        <label><input type="checkbox" class="preview-admin-toggle" checked> Admin</label>
+        <span class="preview-note"></span>
+    </div>
+
+    <script>
+        (function () {
+            var fixtures = window.ANIWORLD_FIXTURES;
+            if (!fixtures) {
+                document.body.innerHTML = '<div class="preview-missing">No <code>dev/fixtures.js</code> yet. Open the AniWorld page ' +
+                    'in Jellyfin, paste <code>dev/capture.js</code> into the browser console, and move the downloaded ' +
+                    '<code>fixtures.js</code> into the <code>dev/</code> folder.</div>';
+                return;
+            }
+
+            var replies = JSON.parse(JSON.stringify(fixtures.replies));
+            var PREFIX = fixtures.server + '/AniWorldDownloader/';
+            var DELAY = 250;
+            var status = replies['GET AutoSync/Status'];
+            var info = replies['GET Info'] || { configured: true };
+            var tracked = (status && status.series && status.series[0]) || null;
+
+            function settings() {
+                try {
+                    return JSON.parse(window.localStorage.getItem('aniworldPreview') || '{}');
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function save(values) {
+                try {
+                    window.localStorage.setItem('aniworldPreview', JSON.stringify(Object.assign(settings(), values)));
+                } catch (e) { /* the toggles just don't stick */ }
+            }
+
+            function later(value) {
+                return new Promise(function (resolve) {
+                    window.setTimeout(function () { resolve(JSON.parse(JSON.stringify(value))); }, DELAY);
+                });
+            }
+
+            // ApiClient rejects with the fetch Response; client.js reads .json() off it
+            function fail(code, message) {
+                return new Promise(function (resolve, reject) {
+                    window.setTimeout(function () {
+                        reject({ status: code, json: function () { return Promise.resolve({ error: message }); } });
+                    }, DELAY);
+                });
+            }
+
+            function now() {
+                return new Date().toISOString();
+            }
+
+            function findRow(id) {
+                return status && status.series.filter(function (row) { return row.id === id; })[0];
+            }
+
+            // Pretends a sync ran: "running" for a few seconds, then checked
+            function fakeRun(rows) {
+                if (status.running) {
+                    return fail(409, 'A sync is already running');
+                }
+
+                status.running = true;
+                window.setTimeout(function () {
+                    status.running = false;
+                    rows.forEach(function (row) {
+                        row.last_checked = now();
+                        row.last_result = { status: 'up-to-date' };
+                    });
+                    status.last_report = { checked: rows.length, queued: 0, results: [] };
+                }, 4000);
+                return later({ ok: true, started: true });
+            }
+
+            // What the plugin's controller would answer, from the fixtures
+            // plus whatever was changed on this page
+            function answer(method, path, body) {
+                var key = method + ' ' + path;
+                var match;
+                if (method === 'GET' && path === 'Info') {
+                    var admin = settings().admin !== false;
+                    return later(Object.assign({}, info, { isAdmin: admin, canDownload: true, canManageSync: admin && Boolean(status) }));
+                }
+
+                if (method === 'GET' && path === 'AutoSync/Status' && status) {
+                    return later(status);
+                }
+
+                if (method === 'POST' && path === 'AutoSync/Run' && status) {
+                    return fakeRun(status.series);
+                }
+
+                if ((match = /^AutoSync\/Series\/(\d+)(\/Run)?$/.exec(path)) && status) {
+                    var row = findRow(Number(match[1]));
+                    if (!row) {
+                        return fail(404, 'Not found');
+                    }
+
+                    if (method === 'POST' && match[2]) {
+                        return fakeRun([row]);
+                    }
+
+                    if (method === 'PUT') {
+                        Object.assign(row, body);
+                        row.schedule = row.cadence === 'daily' ? 'Every day at ' + row.run_time
+                            : row.cadence === 'weekly' ? 'Every week at ' + row.run_time : status.schedule;
+                        return later({ ok: true, series: row });
+                    }
+
+                    if (method === 'DELETE') {
+                        status.series.splice(status.series.indexOf(row), 1);
+                        return later({ ok: true });
+                    }
+                }
+
+                if (method === 'GET' && (match = /^AutoSync\/Tracked\?url=(.*)$/.exec(path))) {
+                    var url = decodeURIComponent(match[1]);
+                    var known = status && status.series.filter(function (r) { return r.series_url === url; })[0];
+                    return later(known ? { tracked: true, series: known } : { tracked: false, series: null });
+                }
+
+                if (method === 'POST' && path === 'AutoSync/Tracked') {
+                    if (!body.tracked) {
+                        status.series = status.series.filter(function (r) { return r.series_url !== body.series_url; });
+                        return later({ ok: true, tracked: false });
+                    }
+
+                    var existing = status.series.filter(function (r) { return r.series_url === body.series_url; })[0];
+                    var next = Object.assign({}, tracked, existing || { id: Date.now(), last_checked: null, last_result: null }, body);
+                    delete next.tracked;
+                    if (!existing) {
+                        status.series.push(next);
+                    } else {
+                        Object.assign(existing, next);
+                    }
+
+                    return later({ ok: true, tracked: true, series: next });
+                }
+
+                if (method === 'POST' && path === 'Download') {
+                    return later({ ok: true, queue_id: Date.now() % 100000 });
+                }
+
+                if (method === 'POST' && /^Queue\/\d+\/Cancel$/.test(path)) {
+                    return later({ ok: true });
+                }
+
+                if (method === 'GET' && /^Queue\?/.test(path)) {
+                    return later(replies['GET Queue?limit=30'] || { items: [] });
+                }
+
+                if (replies[key]) {
+                    return later(replies[key]);
+                }
+
+                return fail(404, 'Not in the fixtures: ' + key);
+            }
+
+            window.ApiClient = {
+                serverAddress: function () { return fixtures.server; },
+                serverId: function () { return 'preview'; },
+                accessToken: function () { return 'preview'; },
+                getCurrentUserId: function () { return 'preview'; },
+                getUrl: function (path, params) {
+                    var query = params ? '?' + new URLSearchParams(params).toString() : '';
+                    return fixtures.server + '/' + path.replace(/^\//, '') + query;
+                },
+                ajax: function (options) {
+                    var path = options.url.indexOf(PREFIX) === 0 ? options.url.slice(PREFIX.length) : options.url;
+                    return answer(options.type || 'GET', path, options.data ? JSON.parse(options.data) : null);
+                },
+                getItem: function () { return Promise.reject(new Error('Not in the preview')); }
+            };
+
+            // SearchStream: the fixture search, one site per line, like the real stream
+            var realFetch = window.fetch.bind(window);
+            window.fetch = function (url, options) {
+                if (String(url).indexOf(PREFIX + 'SearchStream') !== 0) {
+                    return realFetch(url, options);
+                }
+
+                var results = (replies['POST Search'] || {}).results || [];
+                var sites = results.map(function (r) { return r.site; }).filter(function (s, i, all) { return all.indexOf(s) === i; });
+                var encoder = new TextEncoder();
+                var stream = new ReadableStream({
+                    start: function (controller) {
+                        sites.forEach(function (site, i) {
+                            window.setTimeout(function () {
+                                controller.enqueue(encoder.encode(JSON.stringify({
+                                    site: site,
+                                    results: results.filter(function (r) { return r.site === site; }),
+                                    pending: sites.slice(i + 1)
+                                }) + '\n'));
+                                if (i === sites.length - 1) {
+                                    controller.enqueue(encoder.encode('{"done":true}\n'));
+                                    controller.close();
+                                }
+                            }, DELAY * (i + 1));
+                        });
+                        if (!sites.length) {
+                            controller.enqueue(encoder.encode('{"done":true}\n'));
+                            controller.close();
+                        }
+                    }
+                });
+                return Promise.resolve(new Response(stream, { status: 200 }));
+            };
+
+            // jellyfin-web's Dashboard isn't here; client.js doesn't need it
+            window.AniWorldDownloaderBuild = 'preview, fixtures from ' + new Date(fixtures.captured).toLocaleString();
+
+            // The toolbar. In phone mode the page runs in a 390px frame, so the
+            // plugin's phone styles (they go by the window's width) kick in;
+            // the toolbar then stays out here and steers the frame.
+            var framed = window.self !== window.top;
+            var tools = document.querySelector('.preview-tools');
+            var target = window;
+            if (framed) {
+                tools.remove();
+            } else if (settings().phone) {
+                document.querySelector('.preview-frame').remove();
+                var frame = document.createElement('iframe');
+                // Never a cached copy, or the frame lags behind edits to this file
+                frame.src = 'preview.html?' + Date.now() + window.location.hash;
+                frame.style.cssText = 'display:block;width:390px;height:844px;margin:1em auto;border:1px solid #555;border-radius:1em;background:#101010';
+                document.body.insertBefore(frame, tools);
+                target = frame.contentWindow;
+            }
+
+            if (!framed) {
+                setUpTools(target);
+            }
+
+            if (window.location.hash.indexOf('#/search?aniworld') !== 0) {
+                window.location.hash = '#/search?aniworld';
+            }
+
+            if (target === window) {
+                var script = document.createElement('script');
+                script.src = '../Jellyfin.Plugin.AniWorldDownloader/Web/client.js?' + Date.now();
+                document.body.appendChild(script);
+            }
+        })();
+
+        function setUpTools(target) {
+            var fixtures = window.ANIWORLD_FIXTURES;
+            var status = fixtures.replies['GET AutoSync/Status'];
+            var tracked = status && status.series && status.series[0];
+            var detailUrl = tracked ? tracked.series_url : '';
+            function settings() {
+                try {
+                    return JSON.parse(window.localStorage.getItem('aniworldPreview') || '{}');
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function save(values) {
+                try {
+                    window.localStorage.setItem('aniworldPreview', JSON.stringify(Object.assign(settings(), values)));
+                } catch (e) { /* the toggles just don't stick */ }
+            }
+
+            document.querySelectorAll('[data-route]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var extra = button.getAttribute('data-route');
+                    target.location.hash = '#/search?aniworld' + (extra === '&u=' ? '&u=' + encodeURIComponent(detailUrl) : extra);
+                });
+            });
+
+            var phone = document.querySelector('.preview-phone-toggle');
+            phone.checked = Boolean(settings().phone);
+            phone.addEventListener('change', function () {
+                save({ phone: phone.checked });
+                window.location.reload();
+            });
+
+            var admin = document.querySelector('.preview-admin-toggle');
+            admin.checked = settings().admin !== false;
+            admin.addEventListener('change', function () {
+                save({ admin: admin.checked });
+                window.location.reload();
+            });
+
+            document.querySelector('.preview-note').textContent =
+                'Fixtures from ' + fixtures.server + ', ' + new Date(fixtures.captured).toLocaleString() + '. Changes stay on this page.';
+        }
+    </script>
+</body>
+</html>

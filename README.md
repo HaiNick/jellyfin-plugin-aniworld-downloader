@@ -106,6 +106,24 @@ docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
   dotnet publish Jellyfin.Plugin.AniWorldDownloader -c Release -o /src/artifacts
 ```
 
+## Working on the UI without Jellyfin
+
+`dev/preview.html` runs `Web/client.js` straight from the repo, with no
+build and no Jellyfin login, and answers its calls with saved replies:
+
+1. Open the AniWorld page in Jellyfin as an admin, paste `dev/capture.js`
+   into the browser console, and move the downloaded `fixtures.js` into
+   `dev/`. Git ignores it, since it holds your own server's data.
+2. Serve the repo root, for example `python -m http.server 8765`, and open
+   `http://localhost:8765/dev/preview.html`.
+3. Change `client.js` and reload. The toolbar switches between the views and
+   has a 390px phone frame and an admin switch.
+
+Posters and Jellyfin's own styles still come from the server that made the
+fixtures. Saves, downloads and sync runs change only the page's copy of the
+data; nothing reaches AniWorld Downloader. When a Jellyfin update renames its
+stylesheets, copy the new names from the real page into `preview.html`.
+
 ## Changing the UI without restarting Jellyfin
 
 The plugin serves `client.js` from
