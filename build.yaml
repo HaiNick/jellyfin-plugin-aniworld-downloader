@@ -1,7 +1,7 @@
 ---
 name: "AniWorld Downloader"
 guid: "31b711c1-95e5-4481-b7cc-3e43b0476b6d"
-version: "0.2.2.0"
+version: "0.2.3.0"
 targetAbi: "12.2.0.0"
 framework: "net10.0"
 overview: "Search for and download anime, series and movies through AniWorld Downloader"
