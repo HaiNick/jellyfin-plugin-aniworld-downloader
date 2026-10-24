@@ -89,7 +89,7 @@ Checked in AniWorld Downloader's code and in real replies:
   thumbnails, and a title outside it shows the dimmed poster, on desktop
   and at phone width, with SleekFin.
 
-### [ ] 4. More detail on Queue and Auto-Sync
+### [x] 4. More detail on Queue and Auto-Sync
 
 - **Why:** The queue shows status and a progress bar only. The Auto-Sync
   page shows the last check only.
@@ -225,3 +225,6 @@ Checked in AniWorld Downloader's code and in real replies:
   and clear, at most three buttons per row by state, and "Clear" asking
   once on the button itself. Works in the preview, including as a
   non-admin.
+- 2026-10-24: The user checked 0.2.2.20 on the server: the compact title
+  page, the queue and the queue actions look good. Items 1 (compact
+  version) and 4 are done.
