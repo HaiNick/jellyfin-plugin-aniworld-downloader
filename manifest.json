@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.2.17",
+        "changelog": "Development build of autosync-page at 4fdf624. Not a release; it may break.\n\n- keep the download bar above a theme's bottom bar\n- lay out the title page like Jellyfin's item page\n- build the plugin page from Jellyfin's own components\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.17/aniworld-downloader_0.2.2.17.zip",
+        "checksum": "e631d32b05ebc5f3de328a87f48a947d",
+        "timestamp": "2026-10-24T17:59:43Z"
+      },
+      {
         "version": "0.2.2.16",
         "changelog": "Development build of autosync-page at 4e455ea. Not a release; it may break.\n\n- lay out the title page like Jellyfin's item page\n- build the plugin page from Jellyfin's own components\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.8/aniworld-downloader_0.2.2.8.zip",
         "checksum": "0fa1d43c12491dbe51a029cbb2d9f445",
         "timestamp": "2026-10-23T07:34:34Z"
-      },
-      {
-        "version": "0.2.2.7",
-        "changelog": "Development build of queue-captcha at 2596303. Not a release; it may break.\n\n- link Kinox captchas from the queue, and give the plugin card a logo\n- show and solve captchas from the queue view",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.7/aniworld-downloader_0.2.2.7.zip",
-        "checksum": "813651aec75407b5d864aa23c07c95d2",
-        "timestamp": "2026-10-23T07:25:10Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
