@@ -214,6 +214,8 @@
         style.id = 'aniworldDownloaderStyles';
         style.textContent = [
             '#' + PAGE_ID + ' .aniworld-inner{padding-top:1em;padding-bottom:5em;max-width:90em}',
+            // emby-button sets its own display, which beats the hidden attribute
+            '#' + PAGE_ID + ' [hidden]{display:none !important}',
             '#' + PAGE_ID + ' .aniworld-searchbar{display:flex;gap:.5em;align-items:center;max-width:40em}',
             '#' + PAGE_ID + ' .aniworld-searchbar .emby-input{flex:1;margin:0}',
             '#' + PAGE_ID + ' .aniworld-tabs{display:flex;flex-wrap:wrap;gap:.5em;margin:1em 0}',
