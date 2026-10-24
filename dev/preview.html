@@ -142,7 +142,92 @@
                 return status && status.series.filter(function (row) { return row.id === id; })[0];
             }
 
-            // Pretends a sync ran: "running" for a few seconds, then checked
+            // Downloads queued on this page: they run one after the other, 20
+            // seconds an episode, with progress like ffmpeg's
+            var EPISODE_SECONDS = 20;
+            var jobs = [];
+
+            function sqliteTime(ms) {
+                return ms ? new Date(ms).toISOString().replace('T', ' ').slice(0, 19) : null;
+            }
+
+            function addJob(values) {
+                var last = jobs[0];
+                var startAt = Math.max(Date.now() + 2000, last ? last.endAt : 0);
+                var episodes = values.episodes.length ? values.episodes : [''];
+                jobs.unshift(Object.assign({
+                    id: 1000 + jobs.length,
+                    createdAt: Date.now(),
+                    startAt: startAt,
+                    endAt: startAt + episodes.length * EPISODE_SECONDS * 1000,
+                    episodes: episodes
+                }, values));
+                return jobs[0].id;
+            }
+
+            // A job as AniWorld's queue lists it at this moment, and ffmpeg's
+            // progress if it is the one running
+            function jobNow(job, ffmpeg) {
+                var t = Date.now();
+                var count = job.episodes.length;
+                var item = {
+                    id: job.id, title: job.title, series_url: job.seriesUrl, language: job.language, provider: job.provider,
+                    source: job.source, total_episodes: count, current_episode: 0, current_url: '',
+                    created_at: sqliteTime(job.createdAt), started_at: null, completed_at: null, duration_seconds: null,
+                    errors: '[]', status: 'queued'
+                };
+                if (settings().admin !== false) {
+                    item.requestedBy = 'preview';
+                }
+
+                if (t < job.startAt) {
+                    return item;
+                }
+
+                item.started_at = sqliteTime(job.startAt);
+                item.duration_seconds = Math.round((Math.min(t, job.endAt) - job.startAt) / 1000);
+                // The second episode of a job fails, so the errors show
+                var errors = count >= 2 && t >= job.startAt + 2 * EPISODE_SECONDS * 1000
+                    ? [{ url: job.episodes[1], error: 'Download failed for all providers. VOE: 404 Not Found' }]
+                    : [];
+                item.errors = JSON.stringify(errors);
+                if (t >= job.endAt) {
+                    item.status = 'completed';
+                    item.current_episode = count;
+                    item.completed_at = sqliteTime(job.endAt);
+                    return item;
+                }
+
+                var into = (t - job.startAt) / 1000;
+                var index = Math.floor(into / EPISODE_SECONDS);
+                var part = (into % EPISODE_SECONDS) / EPISODE_SECONDS;
+                // A 24-minute episode, read 72 times faster than real time
+                var media = part * 1440;
+                item.status = 'running';
+                item.current_episode = index;
+                item.current_url = job.episodes[index];
+                Object.assign(ffmpeg, {
+                    active: true,
+                    percent: Math.round(part * 1000) / 10,
+                    time: new Date(media * 1000).toISOString().slice(11, 22),
+                    speed: (1440 / EPISODE_SECONDS) + 'x',
+                    bandwidth: '6.4 MB/s'
+                });
+                return item;
+            }
+
+            function queueReply() {
+                var reply = JSON.parse(JSON.stringify(replies['GET Queue?limit=30'] || { items: [] }));
+                var ffmpeg = { active: false, percent: 0, speed: '', time: '', bandwidth: '' };
+                var mine = jobs.map(function (job) { return jobNow(job, ffmpeg); });
+                reply.items = mine.concat(reply.items || []);
+                reply.total = (reply.total || 0) + mine.length;
+                reply.ffmpeg_progress = ffmpeg;
+                return later(reply);
+            }
+
+            // Pretends a sync ran: "running" for a few seconds, then each
+            // series had one new episode, queued as an Auto-Sync download
             function fakeRun(rows) {
                 if (status.running) {
                     return fail(409, 'A sync is already running');
@@ -153,9 +238,13 @@
                     status.running = false;
                     rows.forEach(function (row) {
                         row.last_checked = now();
-                        row.last_result = { status: 'up-to-date' };
+                        row.last_result = { status: 'queued', episodes: 1 };
+                        addJob({
+                            title: row.title, seriesUrl: row.series_url, language: row.language, provider: 'VOE', source: 'autosync',
+                            episodes: [row.series_url + '/staffel-1/episode-3']
+                        });
                     });
-                    status.last_report = { checked: rows.length, queued: 0, results: [] };
+                    status.last_report = { checked: rows.length, queued: rows.length, results: [] };
                 }, 4000);
                 return later({ ok: true, started: true });
             }
@@ -226,15 +315,22 @@
                 }
 
                 if (method === 'POST' && path === 'Download') {
-                    return later({ ok: true, queue_id: Date.now() % 100000 });
+                    return later({
+                        ok: true,
+                        queue_id: addJob({
+                            title: body.Title, seriesUrl: body.SeriesUrl, language: body.Language, provider: body.Provider,
+                            source: 'manual', episodes: body.Episodes || []
+                        })
+                    });
                 }
 
-                if (method === 'POST' && /^Queue\/\d+\/Cancel$/.test(path)) {
+                if (method === 'POST' && (match = /^Queue\/(\d+)\/Cancel$/.exec(path))) {
+                    jobs = jobs.filter(function (job) { return job.id !== Number(match[1]); });
                     return later({ ok: true });
                 }
 
                 if (method === 'GET' && /^Queue\?/.test(path)) {
-                    return later(replies['GET Queue?limit=30'] || { items: [] });
+                    return queueReply();
                 }
 
                 // Jellyfin's own calls are kept without their query, which

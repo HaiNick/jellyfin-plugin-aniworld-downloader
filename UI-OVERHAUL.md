@@ -188,3 +188,20 @@ Checked in AniWorld Downloader's code and in real replies:
     which SleekFin doesn't restyle (a bright blue box). Kept, since Jellyfin
     shows the same.
   - Next: item 4 (Queue and Auto-Sync).
+- 2026-10-24: Item 4 works in the preview.
+  - Queue: a running job shows its episode (S1:E5), percent, speed, time
+    left in the episode, and from 30 s on an estimate for the whole job.
+    Every job shows Auto-Sync or manual, when it was added or finished, and
+    how long it took. Failed episodes open under the job, and **Show more**
+    loads 30 more.
+  - Fixed on the way: `current_episode` is the index of the episode being
+    downloaded (0-based), so the old view showed the wrong episode number
+    and too little progress.
+  - "Who queued it" needed C#: `DownloadOwners.Find` (with a test), and
+    `GetQueue` adds `requestedBy` for admins. The owners file forgets a job
+    once it's done, so only waiting and running jobs have a name.
+  - Auto-Sync: an opened series lists its last 5 jobs from `Queue?limit=200`,
+    matched by `series_url`.
+  - The preview's fake **Download** and sync runs now queue jobs that run,
+    with ffmpeg-like progress, and the second episode fails.
+  - Next: check on the server.

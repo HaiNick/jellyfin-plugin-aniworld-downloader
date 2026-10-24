@@ -66,6 +66,20 @@ public class DownloadOwners
     }
 
     /// <summary>
+    /// Looks up the user who queued a download without forgetting them, for
+    /// the queue view.
+    /// </summary>
+    /// <param name="queueId">AniWorld's queue ID.</param>
+    /// <returns>The user, or null.</returns>
+    public Guid? Find(int queueId)
+    {
+        lock (_lock)
+        {
+            return _owners.TryGetValue(queueId, out var owner) ? owner.UserId : null;
+        }
+    }
+
+    /// <summary>
     /// Takes the user who queued a download, if known.
     /// </summary>
     /// <param name="queueId">AniWorld's queue ID.</param>

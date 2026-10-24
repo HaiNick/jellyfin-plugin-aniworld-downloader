@@ -235,6 +235,74 @@
         return formatTime(iso);
     }
 
+    // AniWorld's queue writes SQLite's UTC times, "2026-10-23 09:54:24"
+    function queueTime(value) {
+        if (!value) {
+            return '';
+        }
+
+        var text = String(value).replace(' ', 'T');
+        return /(Z|[+-]\d\d:?\d\d)$/.test(text) ? text : text + 'Z';
+    }
+
+    // "45 s", "12 min", "1 h 5 min"
+    function formatDuration(seconds) {
+        seconds = Math.max(0, Math.round(seconds));
+        if (seconds < 60) {
+            return seconds + ' s';
+        }
+
+        var minutes = Math.round(seconds / 60);
+        if (minutes < 60) {
+            return minutes + ' min';
+        }
+
+        return Math.floor(minutes / 60) + ' h' + (minutes % 60 ? ' ' + (minutes % 60) + ' min' : '');
+    }
+
+    // Seconds left of the episode downloading now, or null. ffmpeg reports
+    // how far into the video it is and how much faster than real time it
+    // goes ("time" 00:05:12.40, "speed" 4.2x); a direct download reports
+    // megabytes ("time" 12.3/400.0 MB, "bandwidth" 5.1 MB/s).
+    function episodeSecondsLeft(progress) {
+        var bytes = /^([\d.]+)\/([\d.]+) MB$/.exec(progress.time || '');
+        if (bytes) {
+            var rate = parseFloat(progress.bandwidth);
+            return rate > 0 ? (parseFloat(bytes[2]) - parseFloat(bytes[1])) / rate : null;
+        }
+
+        var clock = /^(\d+):(\d+):([\d.]+)$/.exec(progress.time || '');
+        var speed = parseFloat(progress.speed);
+        var percent = Number(progress.percent) || 0;
+        if (!clock || !(speed > 0) || percent <= 0) {
+            return null;
+        }
+
+        var done = Number(clock[1]) * 3600 + Number(clock[2]) * 60 + Number(clock[3]);
+        return (done * 100 / percent - done) / speed;
+    }
+
+    // "S1:E5" from an episode link, the way Jellyfin writes it
+    function episodeLabel(url) {
+        var match = /staffel-(\d+)\/episode-(\d+)/.exec(url || '');
+        if (match) {
+            return 'S' + match[1] + ':E' + match[2];
+        }
+
+        match = /filme\/film-(\d+)/.exec(url || '');
+        return match ? 'Movie ' + match[1] : '';
+    }
+
+    // The failed episodes of a queue item; AniWorld keeps them as JSON text
+    function queueErrors(item) {
+        try {
+            var list = typeof item.errors === 'string' ? JSON.parse(item.errors) : item.errors;
+            return Array.isArray(list) ? list : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
     // Jellyfin's own toast, see src/components/toast
     function toast(message) {
         var box = document.querySelector('.toastContainer');
@@ -388,7 +456,12 @@
             P + ' .aniworld-sync-item .listItemBodyText a{color:inherit;text-decoration:none}',
             P + ' .aniworld-section-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5em}',
             P + ' .aniworld-section-head .emby-button{margin:0}',
-            P + ' .listItem .itemProgressBar{margin-top:.5em}'
+            P + ' .listItem .itemProgressBar{margin-top:.5em}',
+            // Under the item, in line with its text
+            P + ' .aniworld-errors-list{padding:0 1em .5em 3.5em}',
+            P + ' .aniworld-errors-list .fieldDescription{margin:.25em 0;overflow-wrap:anywhere}',
+            P + ' .aniworld-queue-more{margin:1em 0 0}',
+            P + ' .aniworld-history{margin:.5em 0 1em}'
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -1208,14 +1281,24 @@
 
         var status = body.querySelector('.aniworld-status');
         var list = body.querySelector('.aniworld-queue');
+        var more = el('<button type="button" class="raised emby-button aniworld-queue-more" hidden>Show more</button>');
+        body.appendChild(more);
+
+        // How many items to show; "Show more" raises it
+        var limit = 30;
+        // The items whose errors are open, so a refresh keeps them open
+        var openErrors = {};
+        // Each poll bumps this, so only the newest one schedules the next
+        var generation = 0;
 
         function poll() {
+            var mine = ++generation;
             if (isStale(view, inner)) {
                 return;
             }
 
-            api('GET', 'Queue?limit=30').then(function (queue) {
-                if (isStale(view, inner)) {
+            api('GET', 'Queue?limit=' + limit).then(function (queue) {
+                if (isStale(view, inner) || mine !== generation) {
                     return;
                 }
 
@@ -1223,46 +1306,125 @@
             }, function (err) {
                 status.textContent = 'Could not load the queue: ' + err.message;
             }).then(function () {
+                if (mine !== generation) {
+                    return;
+                }
+
                 // Fast while something downloads, slow otherwise
                 var busy = list.querySelector('[data-status="running"],[data-status="queued"]');
-                window.setTimeout(poll, busy ? 2000 : 10000);
+                window.setTimeout(function () {
+                    if (mine === generation) {
+                        poll();
+                    }
+                }, busy ? 2000 : 10000);
             });
+        }
+
+        more.addEventListener('click', function () {
+            limit += 30;
+            more.disabled = true;
+            poll();
+        });
+
+        // Who and where from: language, hoster, Auto-Sync, and for admins the
+        // Jellyfin user who started it
+        function sourceParts(item) {
+            return [
+                item.language,
+                item.provider,
+                item.source === 'autosync' ? 'Auto-Sync' : '',
+                item.requestedBy ? 'started by ' + item.requestedBy : ''
+            ];
+        }
+
+        // The running item's lines: which episode, and how fast and how long
+        function runningLines(item, ffmpeg) {
+            var total = item.total_episodes || 1;
+            var percent = ffmpeg.active ? Number(ffmpeg.percent) || 0 : 0;
+            // current_episode counts the episodes already done
+            var episode = Math.min(total, (item.current_episode || 0) + 1);
+            var where = total > 1 ? 'Episode ' + episode + ' of ' + total : '';
+            var label = episodeLabel(item.current_url);
+            var first = [where && label ? where + ', ' + label : where || label].concat(sourceParts(item));
+
+            var second = [];
+            if (ffmpeg.active) {
+                second.push(Math.round(percent) + '%');
+                second.push(ffmpeg.bandwidth || ffmpeg.speed);
+                var left = episodeSecondsLeft(ffmpeg);
+                if (left !== null) {
+                    second.push(formatDuration(left) + ' left' + (total > 1 ? ' in this episode' : ''));
+                }
+            } else {
+                second.push('Starting…');
+            }
+
+            // The whole job from how long it took so far; only once there is
+            // enough of it to go by
+            var fraction = (episode - 1 + percent / 100) / total;
+            if (total > 1 && fraction > 0.02 && item.duration_seconds > 30) {
+                second.push('about ' + formatDuration(item.duration_seconds * (1 - fraction) / fraction) + ' for all ' + total);
+            }
+
+            return { lines: [first, second], fraction: fraction };
+        }
+
+        function finishedLine(item) {
+            var at = item.completed_at ? relativeTime(queueTime(item.completed_at)) : '';
+            var known = STATUS[item.status] || { label: item.status };
+            return [known.label + (at ? ' ' + at : ''), item.duration_seconds ? 'took ' + formatDuration(item.duration_seconds) : ''];
         }
 
         // A list item like the ones on Jellyfin's dashboard
         function itemHtml(item, ffmpeg) {
             var known = STATUS[item.status] || { label: item.status, icon: 'help_outline' };
-            var parts = [known.label];
-            if (item.total_episodes) {
-                parts.push(item.status === 'running'
-                    ? 'episode ' + Math.max(1, item.current_episode) + ' of ' + item.total_episodes
-                    : plural(item.total_episodes, 'episode'));
-            }
-            parts.push(item.language);
-            if (item.provider) {
-                parts.push(item.provider);
-            }
-
+            var count = item.total_episodes ? plural(item.total_episodes, 'episode') : '';
+            var lines;
             var progress = '';
             if (item.status === 'running') {
-                var percent = ffmpeg.active ? Number(ffmpeg.percent) || 0 : 0;
-                var done = item.total_episodes ? (Math.max(0, item.current_episode - 1) + percent / 100) / item.total_episodes : 0;
-                progress = '<div class="itemProgressBar"><div class="itemProgressBarForeground" style="width:' + Math.round(done * 100) + '%;"></div></div>';
-                if (ffmpeg.active && ffmpeg.speed) {
-                    parts.push(Math.round(percent) + '% at ' + ffmpeg.speed);
-                }
+                var running = runningLines(item, ffmpeg);
+                lines = running.lines;
+                progress = '<div class="itemProgressBar"><div class="itemProgressBarForeground" style="width:' +
+                    Math.round(running.fraction * 100) + '%;"></div></div>';
+            } else if (item.status === 'queued') {
+                lines = [[count].concat(sourceParts(item)), ['Added ' + relativeTime(queueTime(item.created_at))]];
+            } else {
+                lines = [[count].concat(sourceParts(item)), finishedLine(item)];
             }
 
-            var cancel = info.canDownload && (item.status === 'queued' || item.status === 'running')
-                ? iconButton('aniworld-cancel', 'close', 'Cancel', ' data-id="' + item.id + '"')
-                : '';
+            var errors = queueErrors(item);
+            var open = Boolean(openErrors[item.id]);
+            // One episode that failed is just "Failed"; the button has the why
+            if (errors.length && item.total_episodes > 1) {
+                lines[lines.length - 1].push(errors.length + ' of ' + plural(item.total_episodes, 'episode') + ' failed');
+            }
 
-            return '<div class="listItem listItem-border" data-status="' + escapeHtml(item.status) + '">' +
+            var buttons = (errors.length
+                ? iconButton('aniworld-errors', open ? 'expand_less' : 'expand_more', open ? 'Hide errors' : 'Show errors', ' data-id="' + item.id + '"')
+                : '') +
+                (info.canDownload && (item.status === 'queued' || item.status === 'running')
+                    ? iconButton('aniworld-cancel', 'close', 'Cancel', ' data-id="' + item.id + '"')
+                    : '');
+
+            return '<div class="aniworld-queue-item">' +
+                '<div class="listItem listItem-border" data-status="' + escapeHtml(item.status) + '">' +
                 materialIcon(known.icon, 'listItemIcon listItemIcon-transparent') +
-                '<div class="listItemBody two-line">' +
+                '<div class="listItemBody">' +
                 '<div class="listItemBodyText"><bdi>' + escapeHtml(item.title) + '</bdi></div>' +
-                '<div class="listItemBodyText secondary">' + escapeHtml(parts.filter(Boolean).join(' · ')) + '</div>' +
-                progress + '</div>' + cancel + '</div>';
+                lines.map(function (parts) {
+                    // MangaFire downloads have the same language and hoster
+                    return '<div class="listItemBodyText secondary">' + escapeHtml(parts.filter(function (part, i) {
+                        return part && parts.indexOf(part) === i;
+                    }).join(' · ')) + '</div>';
+                }).join('') +
+                progress + '</div>' + buttons + '</div>' +
+                (open
+                    ? '<div class="aniworld-errors-list">' + errors.map(function (failure) {
+                        var where = episodeLabel(failure.url);
+                        return '<p class="fieldDescription">' + escapeHtml((where ? where + ': ' : '') + (failure.error || 'Failed')) + '</p>';
+                    }).join('') + '</div>'
+                    : '') +
+                '</div>';
         }
 
         function draw(queue) {
@@ -1275,6 +1437,16 @@
                     ? sectionHtml(group.title, '', '<div class="paperList">' + mine.map(function (item) { return itemHtml(item, ffmpeg); }).join('') + '</div>')
                     : '';
             }).join('');
+            more.hidden = !(queue.total > items.length);
+            more.disabled = false;
+
+            list.querySelectorAll('.aniworld-errors').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var id = button.getAttribute('data-id');
+                    openErrors[id] = !openErrors[id];
+                    draw(queue);
+                });
+            });
 
             list.querySelectorAll('.aniworld-cancel').forEach(function (button) {
                 button.addEventListener('click', function () {
@@ -1468,11 +1640,49 @@
             });
         }
 
+        // A series' downloads, Auto-Sync's and by hand, from the queue: there is
+        // no history of its own, so it reaches back only as far as the queue
+        function showHistory(target, row) {
+            api('GET', 'Queue?limit=200').then(function (queue) {
+                if (!target.isConnected) {
+                    return;
+                }
+
+                var jobs = (queue.items || []).filter(function (item) {
+                    return item.series_url === row.series_url;
+                }).slice(0, 5);
+                if (!jobs.length) {
+                    target.textContent = 'Nothing from this series in the queue.';
+                    return;
+                }
+
+                target.className = 'aniworld-history paperList';
+                target.innerHTML = jobs.map(function (item) {
+                    var known = STATUS[item.status] || { label: item.status, icon: 'help_outline' };
+                    var errors = queueErrors(item);
+                    var result = [known.label, item.duration_seconds && item.status !== 'queued' ? 'took ' + formatDuration(item.duration_seconds) : '',
+                        errors.length && item.total_episodes > 1 ? errors.length + ' failed' : ''];
+                    return '<div class="listItem listItem-border">' +
+                        materialIcon(known.icon, 'listItemIcon listItemIcon-transparent') +
+                        '<div class="listItemBody two-line">' +
+                        '<div class="listItemBodyText">' + escapeHtml(formatTime(queueTime(item.created_at))) + '</div>' +
+                        '<div class="listItemBodyText secondary">' + escapeHtml([plural(item.total_episodes || 1, 'episode'), item.language,
+                            item.source === 'autosync' ? 'Auto-Sync' : 'by hand'].concat(result).filter(Boolean).join(' · ')) + '</div>' +
+                        '</div></div>';
+                }).join('');
+            }, function (err) {
+                target.textContent = 'Could not load the queue: ' + err.message;
+            });
+        }
+
         function renderSyncEditor(box, row) {
             box.innerHTML =
                 syncFieldsHtml(selectHtml('Language', 'aniworld-sync-language', optionsHtml(LANGUAGES))) +
                 '<button type="button" class="raised button-submit emby-button aniworld-sync-save">Save</button>' +
-                '<button type="button" class="raised emby-button aniworld-sync-remove">Stop syncing</button>';
+                '<button type="button" class="raised emby-button aniworld-sync-remove">Stop syncing</button>' +
+                '<h3 class="sectionTitle">Recent downloads</h3>' +
+                '<div class="aniworld-history fieldDescription">Loading…</div>';
+            showHistory(box.querySelector('.aniworld-history'), row);
 
             var language = box.querySelector('.aniworld-sync-language');
             var season = box.querySelector('.aniworld-sync-season');

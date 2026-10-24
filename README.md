@@ -55,7 +55,7 @@ Everything is under `/AniWorldDownloader` and needs a Jellyfin login.
 | `GET Seasons?url=` | anyone | Seasons |
 | `GET Episodes?url=&seriesUrl=` | anyone | Episodes with languages |
 | `GET Providers?url=` | anyone | Hosters per language |
-| `GET Queue?limit=&offset=&status=` | anyone | The download queue |
+| `GET Queue?limit=&offset=&status=` | anyone | The download queue. For admins, waiting and running downloads carry `requestedBy`, the Jellyfin user who started them |
 | `POST Queue/{id}/Cancel` | may download | Cancel a queued or running download |
 | `POST Download` `{Episodes, Language, Provider, Title, SeriesUrl}` | may download | Queue episodes |
 | `GET/POST AutoSync/Tracked` | POST: may download | "Sync this with Auto-Sync" |

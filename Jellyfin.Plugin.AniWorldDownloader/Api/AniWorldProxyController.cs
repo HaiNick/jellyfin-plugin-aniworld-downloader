@@ -38,6 +38,7 @@ public class AniWorldProxyController : ControllerBase
     private readonly DownloadOwners _owners;
     private readonly ILibraryManager _libraryManager;
     private readonly IActivityManager _activityManager;
+    private readonly IUserManager _userManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AniWorldProxyController"/> class.
@@ -48,13 +49,15 @@ public class AniWorldProxyController : ControllerBase
     /// <param name="owners">Who queued which download, for the "done" message.</param>
     /// <param name="libraryManager">The library manager.</param>
     /// <param name="activityManager">The activity log.</param>
+    /// <param name="userManager">The user manager, for the names in the queue.</param>
     public AniWorldProxyController(
         IAuthorizationContext authContext,
         AniWorldClient aniWorld,
         LibraryMatcher library,
         DownloadOwners owners,
         ILibraryManager libraryManager,
-        IActivityManager activityManager)
+        IActivityManager activityManager,
+        IUserManager userManager)
     {
         _authContext = authContext;
         _aniWorld = aniWorld;
@@ -62,6 +65,7 @@ public class AniWorldProxyController : ControllerBase
         _owners = owners;
         _libraryManager = libraryManager;
         _activityManager = activityManager;
+        _userManager = userManager;
     }
 
     /// <summary>
@@ -353,7 +357,9 @@ public class AniWorldProxyController : ControllerBase
         => ForwardGet("providers", new() { ["url"] = url }, cancellationToken);
 
     /// <summary>
-    /// The download queue with live progress.
+    /// The download queue with live progress. For admins, downloads that are
+    /// still waiting or running carry "requestedBy", the Jellyfin user who
+    /// started them.
     /// </summary>
     /// <param name="limit">Page size.</param>
     /// <param name="offset">Page start.</param>
@@ -362,19 +368,39 @@ public class AniWorldProxyController : ControllerBase
     /// <returns>The queue.</returns>
     [HttpGet("Queue")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public Task<ActionResult> GetQueue(
+    public async Task<ActionResult> GetQueue(
         [FromQuery] int? limit,
         [FromQuery] int? offset,
         [FromQuery] string? status,
         CancellationToken cancellationToken)
-        => ForwardGet(
+    {
+        var reply = await _aniWorld.SendAsync(
+            HttpMethod.Get,
             "queue",
-            new() { ["limit"] = limit?.ToString(), ["offset"] = offset?.ToString(), ["status"] = status },
+            new Dictionary<string, string?> { ["limit"] = limit?.ToString(), ["offset"] = offset?.ToString(), ["status"] = status },
+            null,
             cancellationToken,
-            requireUrl: false,
             // The queue page asks every few seconds and shows the error itself;
             // the download watcher reports an outage once
-            quiet: true);
+            quiet: true).ConfigureAwait(false);
+
+        // The owners file forgets a download once it is done, so finished
+        // ones have no name
+        if (reply.Json?["items"] is JsonArray items && await GetCallerAsync().ConfigureAwait(false) is { IsAdmin: true })
+        {
+            foreach (var item in items.OfType<JsonObject>())
+            {
+                if (item["id"] is JsonValue id && id.TryGetValue<int>(out var queueId)
+                    && _owners.Find(queueId) is { } userId
+                    && _userManager.GetUserById(userId) is { } user)
+                {
+                    item["requestedBy"] = user.Username;
+                }
+            }
+        }
+
+        return Reply(reply);
+    }
 
     /// <summary>
     /// Cancels a queued or running download. Needs the download permission.

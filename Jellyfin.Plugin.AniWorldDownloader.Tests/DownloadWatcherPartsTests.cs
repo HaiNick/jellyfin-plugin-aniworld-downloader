@@ -42,6 +42,18 @@ public sealed class DownloadOwnersTests : IDisposable
     }
 
     [Fact]
+    public void FindingAnOwnerKeepsThem()
+    {
+        var user = Guid.NewGuid();
+        var owners = Create();
+        owners.Add(7, user);
+
+        Assert.Equal(user, owners.Find(7));
+        Assert.Equal(user, owners.Take(7));
+        Assert.Null(owners.Find(7));
+    }
+
+    [Fact]
     public void OldOwnersAreDropped()
     {
         var owners = Create();
