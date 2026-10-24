@@ -24,6 +24,11 @@ and the official Android app.
 - **Auto-Sync:** aniworld and s.to titles have a **Keep up to date with
   Auto-Sync** switch with a start point and schedule (when Auto-Sync is on in
   AniWorld Downloader).
+- **Auto-Sync page:** with a second key with full access in the settings,
+  admins get an **Auto-Sync** button next to **Queue**. It lists every
+  tracked series with its schedule, last check and result, and lets admins
+  change a series' language, start point and schedule, check one series or
+  all of them now, or stop syncing a series.
 - **Queue:** the downloads with live progress; users who may download can
   cancel.
 - **Library scan:** a finished download shows up in Jellyfin within about a
@@ -54,11 +59,17 @@ Everything is under `/AniWorldDownloader` and needs a Jellyfin login.
 | `POST Queue/{id}/Cancel` | may download | Cancel a queued or running download |
 | `POST Download` `{Episodes, Language, Provider, Title, SeriesUrl}` | may download | Queue episodes |
 | `GET/POST AutoSync/Tracked` | POST: may download | "Sync this with Auto-Sync" |
+| `GET AutoSync/Status` | admins, Auto-Sync key | Schedule, last run and every tracked series |
+| `POST AutoSync/Run` | admins, Auto-Sync key | Check every tracked series now |
+| `PUT AutoSync/Series/{id}` | admins, Auto-Sync key | Change a series' language, start point or schedule |
+| `DELETE AutoSync/Series/{id}` | admins, Auto-Sync key | Stop syncing a series |
+| `POST AutoSync/Series/{id}/Run` | admins, Auto-Sync key | Check one series now |
 | `GET Image?url=&sig=` | no login | Posters, only links the plugin signed |
-| `POST TestConnection` `{Url, ApiKey}` | admins | AniWorld's `/api/ping` |
+| `POST TestConnection` `{Url, ApiKey, AdminApiKey}` | admins | AniWorld's `/api/ping`, with the Auto-Sync key's ping under `admin` |
 
 Admins may always download; other users only when ticked in the settings.
-The AniWorld URL and key never leave the Jellyfin server.
+The AniWorld URL and keys never leave the Jellyfin server. The Auto-Sync key
+is used only for the Auto-Sync endpoints above, and only for Jellyfin admins.
 
 ## How it works
 

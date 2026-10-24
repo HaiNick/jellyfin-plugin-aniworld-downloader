@@ -19,6 +19,13 @@ public class PluginConfiguration : BasePluginConfiguration
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets an optional AniWorld Downloader key with full access. Only
+    /// the Auto-Sync overview uses it, and only for Jellyfin admins; without
+    /// it the overview is hidden.
+    /// </summary>
+    public string AdminApiKey { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the non-admin users who may download. Admins always may,
     /// and anyone logged in may search.
     /// </summary>

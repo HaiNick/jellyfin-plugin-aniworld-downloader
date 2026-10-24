@@ -26,6 +26,15 @@
                                 "Read and download" access is enough. It stays on this server.
                             </div>
                         </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AdminApiKey">Auto-Sync key (optional)</label>
+                            <input id="AdminApiKey" name="AdminApiKey" type="password" is="emby-input" autocomplete="off" />
+                            <div class="fieldDescription">
+                                A second key with "Full access". With it, admins get an Auto-Sync page next to the
+                                queue that lists every tracked series and can edit, check or remove them. Leave it
+                                empty to hide that page.
+                            </div>
+                        </div>
                         <div>
                             <button id="AniWorldTestConnection" is="emby-button" type="button" class="raised emby-button">
                                 <span>Test connection</span>
@@ -131,6 +140,7 @@
                         var config = r[0];
                         field('AniWorldUrl').value = config.AniWorldUrl || '';
                         field('ApiKey').value = config.ApiKey || '';
+                        field('AdminApiKey').value = config.AdminApiKey || '';
                         field('DefaultLanguage').value = config.DefaultLanguage || 'German Dub';
                         field('DefaultProvider').value = config.DefaultProvider || 'VOE';
                         field('ScanAfterDownload').checked = config.ScanAfterDownload !== false;
@@ -148,7 +158,11 @@
                     ApiClient.ajax({
                         type: 'POST',
                         url: ApiClient.getUrl('AniWorldDownloader/TestConnection'),
-                        data: JSON.stringify({ Url: field('AniWorldUrl').value, ApiKey: field('ApiKey').value }),
+                        data: JSON.stringify({
+                            Url: field('AniWorldUrl').value,
+                            ApiKey: field('ApiKey').value,
+                            AdminApiKey: field('AdminApiKey').value
+                        }),
                         contentType: 'application/json',
                         dataType: 'json'
                     }).then(function (ping) {
@@ -157,7 +171,15 @@
                             : 'no key needed (login is off in AniWorld Downloader)';
                         var warn = ping.method === 'api_key' && ping.scope === 'read'
                             ? ' This key can only read: downloads will fail.' : '';
-                        result.textContent = 'Connected to AniWorld Downloader ' + ping.version + ', ' + who + '.' + warn;
+                        var admin = '';
+                        if (ping.admin && ping.admin.error) {
+                            admin = ' Auto-Sync key: ' + ping.admin.error + '.';
+                        } else if (ping.admin) {
+                            admin = ping.admin.scope === 'admin'
+                                ? ' Auto-Sync key' + (ping.admin.name ? ' "' + ping.admin.name + '"' : '') + ' has full access.'
+                                : ' The Auto-Sync key has only ' + ping.admin.scope + ' access: the Auto-Sync page will fail.';
+                        }
+                        result.textContent = 'Connected to AniWorld Downloader ' + ping.version + ', ' + who + '.' + warn + admin;
                     }, function (err) {
                         var status = err && err.status;
                         if (err && typeof err.json === 'function') {
@@ -178,6 +200,7 @@
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         config.AniWorldUrl = field('AniWorldUrl').value.trim();
                         config.ApiKey = field('ApiKey').value.trim();
+                        config.AdminApiKey = field('AdminApiKey').value.trim();
                         config.DefaultLanguage = field('DefaultLanguage').value;
                         config.DefaultProvider = field('DefaultProvider').value;
                         config.ScanAfterDownload = field('ScanAfterDownload').checked;

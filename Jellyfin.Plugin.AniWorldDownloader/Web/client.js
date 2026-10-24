@@ -240,6 +240,7 @@
             'background:var(--aniworld-accent,#00a4dc)}',
             '#' + PAGE_ID + ' .aniworld-titlebar{display:flex;align-items:center;justify-content:space-between;gap:1em}',
             '#' + PAGE_ID + ' .aniworld-titlebar .emby-button{margin:0;min-height:2.75em}',
+            '#' + PAGE_ID + ' .aniworld-titlebar-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5em}',
             '#' + PAGE_ID + ' .aniworld-library-link{display:inline-block;margin-top:.75em;min-height:2.75em}',
             '#' + PAGE_ID + ' .aniworld-links{display:flex;flex-wrap:wrap;gap:.5em;align-items:center}',
             '#' + PAGE_ID + ' .aniworld-site-link{display:inline-flex;align-items:center;gap:.4em;margin-top:.75em;min-height:2.75em;' +
@@ -264,6 +265,18 @@
             '#' + PAGE_ID + ' .aniworld-progress{height:.3em;border-radius:.15em;margin-top:.45em;background:rgba(128,128,128,.25);overflow:hidden}',
             '#' + PAGE_ID + ' .aniworld-progress span{display:block;height:100%;background:var(--aniworld-accent,#00a4dc);transition:width .5s}',
             '#' + PAGE_ID + ' .aniworld-queue-item .emby-button{margin:0;min-height:2.5em;flex:none}',
+            '#' + PAGE_ID + ' .aniworld-sync-item + .aniworld-sync-item{border-top:1px solid rgba(128,128,128,.2)}',
+            '#' + PAGE_ID + ' .aniworld-sync-title{display:block;color:inherit;text-decoration:none;cursor:pointer}',
+            '#' + PAGE_ID + ' .aniworld-sync-title:hover{text-decoration:underline}',
+            '#' + PAGE_ID + ' .aniworld-sync-buttons{display:flex;flex-wrap:wrap;gap:.5em;flex:none}',
+            '#' + PAGE_ID + ' .aniworld-sync-editor{margin:0 1em .75em}',
+            '#' + PAGE_ID + ' .aniworld-sync-fields .aniworld-sync-wide{grid-column:1 / -1}',
+            '#' + PAGE_ID + ' .aniworld-sync-editor-actions{display:flex;flex-wrap:wrap;gap:.75em;margin-top:1em}',
+            '#' + PAGE_ID + ' .aniworld-sync-editor-actions .emby-button{margin:0;min-height:2.75em}',
+            // On a phone the buttons go below the text instead of squeezing it
+            '@media (max-width:40em){#' + PAGE_ID + ' .aniworld-sync-item .aniworld-queue-item{flex-wrap:wrap}' +
+            '#' + PAGE_ID + ' .aniworld-sync-buttons{width:100%}' +
+            '#' + PAGE_ID + ' .aniworld-sync-buttons .emby-button{flex:1}}',
             '#' + PAGE_ID + ' .aniworld-head{display:flex;gap:1em;align-items:flex-start}',
             '#' + PAGE_ID + ' .aniworld-head .aniworld-poster{width:10em;flex:none}',
             '#' + PAGE_ID + ' .aniworld-head-text{flex:1;min-width:0}',
@@ -364,7 +377,9 @@
 
         inner.innerHTML =
             '<div class="aniworld-titlebar"><h1 class="sectionTitle">AniWorld</h1>' +
-            '<button type="button" class="raised emby-button aniworld-open-queue">Queue</button></div>' +
+            '<div class="aniworld-titlebar-actions">' +
+            (info.canManageSync ? '<button type="button" class="raised emby-button aniworld-open-autosync">Auto-Sync</button>' : '') +
+            '<button type="button" class="raised emby-button aniworld-open-queue">Queue</button></div></div>' +
             '<form class="aniworld-searchbar">' +
             '<input type="search" class="emby-input" name="q" autocomplete="off" enterkeyhint="search" ' +
             'placeholder="Search anime, series and movies" aria-label="Search" value="' + escapeHtml(keyword) + '">' +
@@ -387,6 +402,11 @@
         inner.querySelector('.aniworld-open-queue').addEventListener('click', function () {
             routeTo({ view: 'queue' });
         });
+        if (info.canManageSync) {
+            inner.querySelector('.aniworld-open-autosync').addEventListener('click', function () {
+                routeTo({ view: 'autosync' });
+            });
+        }
 
         var form = inner.querySelector('form');
         var input = form.querySelector('input');
@@ -815,6 +835,28 @@
 
     var WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+    // Start point and schedule, shared by the detail page's switch and the
+    // Auto-Sync view
+    function syncFieldsHtml(extra) {
+        return '<div class="aniworld-sync-fields">' + (extra || '') +
+            '<div><label class="inputLabel">From season</label>' +
+            '<input type="number" min="0" class="emby-input aniworld-sync-season"></div>' +
+            '<div><label class="inputLabel">From episode</label>' +
+            '<input type="number" min="1" class="emby-input aniworld-sync-episode"></div>' +
+            '<div class="aniworld-sync-cadence-box"><label class="selectLabel">When</label>' +
+            '<select class="emby-select-withcolor emby-select aniworld-sync-cadence">' +
+            '<option value="global">With the global schedule</option>' +
+            '<option value="daily">Every day</option>' +
+            '<option value="weekly">Every week</option></select></div>' +
+            '<div class="aniworld-sync-weekday-box"><label class="selectLabel">Day</label>' +
+            '<select class="emby-select-withcolor emby-select aniworld-sync-weekday">' +
+            WEEKDAYS.map(function (day, i) { return '<option value="' + i + '">' + day + '</option>'; }).join('') +
+            '</select></div>' +
+            '<div class="aniworld-sync-time-box"><label class="inputLabel">At</label>' +
+            '<input type="time" class="emby-input aniworld-sync-time"></div>' +
+            '</div>';
+    }
+
     function renderSync(inner, seriesUrl, title, info, view) {
         var box = inner.querySelector('.aniworld-sync');
         if (!info.canDownload || !canSync(seriesUrl)) {
@@ -829,23 +871,7 @@
             box.innerHTML =
                 '<label class="aniworld-sync-switch"><input type="checkbox" class="aniworld-sync-on">' +
                 '<span>Keep up to date with Auto-Sync</span></label>' +
-                '<div class="aniworld-sync-fields">' +
-                '<div><label class="inputLabel">From season</label>' +
-                '<input type="number" min="0" class="emby-input aniworld-sync-season"></div>' +
-                '<div><label class="inputLabel">From episode</label>' +
-                '<input type="number" min="1" class="emby-input aniworld-sync-episode"></div>' +
-                '<div class="aniworld-sync-cadence-box"><label class="selectLabel">When</label>' +
-                '<select class="emby-select-withcolor emby-select aniworld-sync-cadence">' +
-                '<option value="global">With the global schedule</option>' +
-                '<option value="daily">Every day</option>' +
-                '<option value="weekly">Every week</option></select></div>' +
-                '<div class="aniworld-sync-weekday-box"><label class="selectLabel">Day</label>' +
-                '<select class="emby-select-withcolor emby-select aniworld-sync-weekday">' +
-                WEEKDAYS.map(function (day, i) { return '<option value="' + i + '">' + day + '</option>'; }).join('') +
-                '</select></div>' +
-                '<div class="aniworld-sync-time-box"><label class="inputLabel">At</label>' +
-                '<input type="time" class="emby-input aniworld-sync-time"></div>' +
-                '</div>' +
+                syncFieldsHtml() +
                 '<div class="fieldDescription aniworld-sync-status"></div>';
             box.hidden = false;
 
@@ -1031,6 +1057,242 @@
         }
 
         poll();
+    }
+
+    // ------------------------------------------------------------------
+    // Auto-Sync view
+    // ------------------------------------------------------------------
+    // The "status" of a series' last check, see sync_series in AniWorld's autosync.py
+    var SYNC_RESULTS = {
+        queued: 'Queued',
+        'up-to-date': 'Up to date',
+        skipped: 'Skipped',
+        error: 'Failed'
+    };
+
+    function formatTime(iso) {
+        return iso ? new Date(iso).toLocaleString() : 'never';
+    }
+
+    function syncResult(result) {
+        if (!result) {
+            return 'Not checked yet';
+        }
+
+        var text = SYNC_RESULTS[result.status] || result.status;
+        if (result.status === 'queued' && result.episodes) {
+            text += ' ' + result.episodes + (result.episodes === 1 ? ' episode' : ' episodes');
+        }
+
+        return result.reason ? text + ': ' + result.reason : text;
+    }
+
+    function renderAutoSync(inner, info) {
+        var view = renderedHash;
+        inner.innerHTML =
+            '<div class="aniworld-titlebar"><h1 class="sectionTitle">Auto-Sync</h1>' +
+            '<div class="aniworld-titlebar-actions">' +
+            '<button type="button" class="raised button-submit emby-button aniworld-sync-run" hidden>Sync now</button>' +
+            '<button type="button" class="raised emby-button aniworld-back">Search</button></div></div>' +
+            '<div class="aniworld-status">Loading…</div>' +
+            '<div class="aniworld-queue paperList"></div>';
+        setTitle('AniWorld Auto-Sync');
+        inner.querySelector('.aniworld-back').addEventListener('click', function () {
+            routeTo({});
+        });
+
+        var status = inner.querySelector('.aniworld-status');
+        var list = inner.querySelector('.aniworld-queue');
+        var runAll = inner.querySelector('.aniworld-sync-run');
+        if (!info.canManageSync) {
+            status.textContent = info.isAdmin
+                ? 'Add a key with full access under Dashboard → Plugins → AniWorld Downloader to manage Auto-Sync here.'
+                : 'Only admins can manage Auto-Sync.';
+            return;
+        }
+
+        // The series whose settings are open, so a refresh doesn't close them
+        var editing = null;
+        var running = false;
+        // Each refresh bumps this, so only the newest one schedules the next
+        var generation = 0;
+
+        function refresh() {
+            var mine = ++generation;
+            api('GET', 'AutoSync/Status').then(function (state) {
+                if (!isStale(view, inner) && mine === generation) {
+                    draw(state);
+                }
+            }, function (err) {
+                if (isStale(view, inner)) {
+                    return;
+                }
+
+                // AniWorld answers a plain 404 page while Auto-Sync is off there
+                status.textContent = /HTTP 404/.test(err.message)
+                    ? 'Auto-Sync is off in AniWorld Downloader. Turn it on in its settings.'
+                    : 'Could not load Auto-Sync: ' + err.message;
+                list.innerHTML = '';
+                runAll.hidden = true;
+            }).then(function () {
+                if (!isStale(view, inner) && mine === generation) {
+                    // Fast while a run goes, slow otherwise
+                    window.setTimeout(function () {
+                        if (mine === generation && !isStale(view, inner)) {
+                            refresh();
+                        }
+                    }, running ? 3000 : 30000);
+                }
+            });
+        }
+
+        function start(path, label) {
+            return api('POST', path).then(function () {
+                toast(label);
+                refresh();
+            }, function (err) {
+                toast('Auto-Sync: ' + err.message);
+            });
+        }
+
+        runAll.addEventListener('click', function () {
+            runAll.disabled = true;
+            start('AutoSync/Run', 'Auto-Sync checks every series now');
+        });
+
+        // A refresh leaves the list alone while settings are open, or it would
+        // throw away what is being typed; force redraws it anyway
+        function draw(state, force) {
+            var series = state.series || [];
+            running = Boolean(state.running);
+            runAll.hidden = false;
+            runAll.disabled = running;
+
+            var lines = [running ? 'Checking now…' : (state.schedule || 'On a schedule') + '.'];
+            lines.push('Last run ' + formatTime(state.last_run) + ', next ' + formatTime(state.next_run) + '.');
+            if (state.last_report && !running) {
+                lines.push('Last report: ' + state.last_report.checked + ' checked, ' + state.last_report.queued + ' queued.');
+            }
+            if (!series.length) {
+                lines.push('No series is tracked yet. Switch on "Keep up to date with Auto-Sync" on a title\'s page.');
+            }
+            status.textContent = lines.join(' ');
+
+            if (editing !== null && !series.some(function (row) { return row.id === editing; })) {
+                editing = null;
+            }
+
+            if (editing !== null && !force) {
+                return;
+            }
+
+            list.innerHTML = series.map(function (row) {
+                var parts = [row.language, row.where, row.schedule];
+                var checked = 'Checked ' + formatTime(row.last_checked) + ': ' + syncResult(row.last_result);
+                var next = row.next_run ? 'Next check ' + formatTime(row.next_run) : '';
+                var open = row.id === editing;
+                return '<div class="aniworld-sync-item" data-id="' + row.id + '">' +
+                    '<div class="aniworld-queue-item">' +
+                    '<div class="aniworld-queue-text">' +
+                    '<a class="aniworld-queue-title aniworld-sync-title" role="button" tabindex="0">' + escapeHtml(row.title || row.series_url) + '</a>' +
+                    '<div class="aniworld-queue-sub">' + escapeHtml(parts.filter(Boolean).join(' · ')) + '</div>' +
+                    '<div class="aniworld-queue-sub">' + escapeHtml(checked) + '</div>' +
+                    (next ? '<div class="aniworld-queue-sub">' + escapeHtml(next) + '</div>' : '') +
+                    '</div>' +
+                    '<div class="aniworld-sync-buttons">' +
+                    '<button type="button" class="raised emby-button aniworld-sync-check"' + (running ? ' disabled' : '') + '>Check now</button>' +
+                    '<button type="button" class="raised emby-button aniworld-sync-edit" aria-expanded="' + open + '">Edit</button>' +
+                    '</div></div>' +
+                    (open ? '<div class="aniworld-sync aniworld-sync-editor"></div>' : '') +
+                    '</div>';
+            }).join('');
+
+            series.forEach(function (row) {
+                var item = list.querySelector('.aniworld-sync-item[data-id="' + row.id + '"]');
+                item.querySelector('.aniworld-sync-title').addEventListener('click', function () {
+                    routeTo({ u: row.series_url });
+                });
+                item.querySelector('.aniworld-sync-check').addEventListener('click', function (e) {
+                    e.target.disabled = true;
+                    start('AutoSync/Series/' + row.id + '/Run', 'Checking ' + (row.title || 'the series') + ' now');
+                });
+                item.querySelector('.aniworld-sync-edit').addEventListener('click', function () {
+                    editing = editing === row.id ? null : row.id;
+                    draw(state, true);
+                });
+                if (row.id === editing) {
+                    renderSyncEditor(item.querySelector('.aniworld-sync-editor'), row);
+                }
+            });
+        }
+
+        function renderSyncEditor(box, row) {
+            box.innerHTML =
+                syncFieldsHtml(
+                    '<div class="aniworld-sync-wide"><label class="selectLabel">Language</label>' +
+                    '<select class="emby-select-withcolor emby-select aniworld-sync-language">' +
+                    Object.keys(LANGUAGE_SHORT).map(function (lang) {
+                        return '<option value="' + escapeHtml(lang) + '">' + escapeHtml(lang) + '</option>';
+                    }).join('') + '</select></div>') +
+                '<div class="aniworld-sync-editor-actions">' +
+                '<button type="button" class="raised button-submit emby-button aniworld-sync-save">Save</button>' +
+                '<button type="button" class="raised emby-button aniworld-sync-remove">Stop syncing</button>' +
+                '</div>';
+
+            var language = box.querySelector('.aniworld-sync-language');
+            var season = box.querySelector('.aniworld-sync-season');
+            var episode = box.querySelector('.aniworld-sync-episode');
+            var cadence = box.querySelector('.aniworld-sync-cadence');
+            var weekday = box.querySelector('.aniworld-sync-weekday');
+            var time = box.querySelector('.aniworld-sync-time');
+            language.value = row.language;
+            season.value = row.start_season;
+            episode.value = row.start_episode;
+            cadence.value = row.cadence;
+            weekday.value = String(row.weekday);
+            time.value = row.run_time;
+
+            function show() {
+                box.querySelector('.aniworld-sync-weekday-box').style.display = cadence.value === 'weekly' ? '' : 'none';
+                box.querySelector('.aniworld-sync-time-box').style.display = cadence.value === 'global' ? 'none' : '';
+            }
+
+            cadence.addEventListener('change', show);
+            show();
+
+            box.querySelector('.aniworld-sync-save').addEventListener('click', function (e) {
+                e.target.disabled = true;
+                api('PUT', 'AutoSync/Series/' + row.id, {
+                    language: language.value,
+                    start_season: Number(season.value || 0),
+                    start_episode: Number(episode.value || 1),
+                    cadence: cadence.value,
+                    weekday: Number(weekday.value),
+                    run_time: time.value || '22:00'
+                }).then(function () {
+                    toast('Saved');
+                    editing = null;
+                    refresh();
+                }, function (err) {
+                    e.target.disabled = false;
+                    toast('Auto-Sync: ' + err.message);
+                });
+            });
+
+            box.querySelector('.aniworld-sync-remove').addEventListener('click', function (e) {
+                e.target.disabled = true;
+                api('DELETE', 'AutoSync/Series/' + row.id).then(function () {
+                    toast((row.title || 'The series') + ' is no longer synced');
+                    editing = null;
+                    refresh();
+                }, function (err) {
+                    e.target.disabled = false;
+                    toast('Auto-Sync: ' + err.message);
+                });
+            });
+        }
+
+        refresh();
     }
 
     function seasonLabel(season) {
@@ -1517,6 +1779,8 @@
 
             if (params.get('view') === 'queue') {
                 renderQueue(inner, info);
+            } else if (params.get('view') === 'autosync') {
+                renderAutoSync(inner, info);
             } else if (params.get('u')) {
                 renderDetail(inner, params, info);
             } else {

@@ -85,6 +85,7 @@ public class AniWorldProxyController : ControllerBase
             ["configured"] = AniWorldClient.IsConfigured,
             ["isAdmin"] = caller.IsAdmin,
             ["canDownload"] = caller.CanDownload,
+            ["canManageSync"] = caller.IsAdmin && AniWorldClient.HasAdminKey,
             ["defaultLanguage"] = config.DefaultLanguage,
             ["defaultProvider"] = config.DefaultProvider,
         });
@@ -484,6 +485,66 @@ public class AniWorldProxyController : ControllerBase
     }
 
     /// <summary>
+    /// Auto-Sync's schedule, last run and every tracked series. Admins only,
+    /// with the full-access key.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's status.</returns>
+    [HttpGet("AutoSync/Status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<ActionResult> GetSyncStatus(CancellationToken cancellationToken)
+        => ForwardAdmin(HttpMethod.Get, "autosync/status", null, cancellationToken);
+
+    /// <summary>
+    /// Starts a run over every tracked series. Admins only.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply; 409 while a run is going.</returns>
+    [HttpPost("AutoSync/Run")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<ActionResult> RunSync(CancellationToken cancellationToken)
+        => ForwardAdmin(HttpMethod.Post, "autosync/run", null, cancellationToken);
+
+    /// <summary>
+    /// Checks one tracked series now. Admins only.
+    /// </summary>
+    /// <param name="id">The tracked series.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply; 409 while a run is going.</returns>
+    [HttpPost("AutoSync/Series/{id:int}/Run")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<ActionResult> RunSyncSeries([FromRoute] int id, CancellationToken cancellationToken)
+        => ForwardAdmin(HttpMethod.Post, $"autosync/series/{id}/run", null, cancellationToken);
+
+    /// <summary>
+    /// Changes a tracked series' language, start point or schedule. Admins only.
+    /// </summary>
+    /// <param name="id">The tracked series.</param>
+    /// <param name="body">The AniWorld body: language, start_season, cadence and the rest.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The updated series.</returns>
+    [HttpPut("AutoSync/Series/{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<ActionResult> UpdateSyncSeries([FromRoute] int id, [FromBody] JsonObject body, CancellationToken cancellationToken)
+        => ForwardAdmin(HttpMethod.Put, $"autosync/series/{id}", body, cancellationToken);
+
+    /// <summary>
+    /// Stops Auto-Sync following a series. Admins only.
+    /// </summary>
+    /// <param name="id">The tracked series.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply.</returns>
+    [HttpDelete("AutoSync/Series/{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<ActionResult> DeleteSyncSeries([FromRoute] int id, CancellationToken cancellationToken)
+        => ForwardAdmin(HttpMethod.Delete, $"autosync/series/{id}", null, cancellationToken);
+
+    /// <summary>
     /// Serves a poster. Anonymous, because an &lt;img&gt; can't send the login,
     /// but only for links the plugin signed itself.
     /// </summary>
@@ -540,7 +601,18 @@ public class AniWorldProxyController : ControllerBase
         var config = Plugin.Instance!.Configuration;
         var url = Pick(request.Url, config.AniWorldUrl);
         var key = Pick(request.ApiKey, config.ApiKey);
-        return Reply(await _aniWorld.SendAsync(url, key, HttpMethod.Get, "ping", null, null, cancellationToken).ConfigureAwait(false));
+        var reply = await _aniWorld.SendAsync(url, key, HttpMethod.Get, "ping", null, null, cancellationToken).ConfigureAwait(false);
+
+        // The Auto-Sync key gets its own ping, so a wrong one shows up here
+        // and not first in the overview
+        var adminKey = Pick(request.AdminApiKey, config.AdminApiKey);
+        if (reply.Status == StatusCodes.Status200OK && reply.Json is JsonObject json && !string.IsNullOrEmpty(adminKey))
+        {
+            var admin = await _aniWorld.SendAsync(url, adminKey, HttpMethod.Get, "ping", null, null, cancellationToken).ConfigureAwait(false);
+            json["admin"] = admin.Json?.DeepClone();
+        }
+
+        return Reply(reply);
     }
 
     private static string Pick(string? value, string fallback)
@@ -562,6 +634,29 @@ public class AniWorldProxyController : ControllerBase
     }
 
     private ObjectResult Reply(AniWorldReply reply) => StatusCode(reply.Status, reply.Json);
+
+    private async Task<ActionResult> ForwardAdmin(HttpMethod method, string path, JsonNode? body, CancellationToken cancellationToken)
+    {
+        var caller = await GetCallerAsync().ConfigureAwait(false);
+        if (caller is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!caller.IsAdmin)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new JsonObject { ["error"] = "Only admins can manage Auto-Sync" });
+        }
+
+        if (!AniWorldClient.HasAdminKey)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new JsonObject { ["error"] = "Add a key with full access under the plugin's Auto-Sync settings first." });
+        }
+
+        return Reply(await _aniWorld.SendAdminAsync(method, path, body, cancellationToken).ConfigureAwait(false));
+    }
 
     private async Task<ActionResult?> DenyDownloadAsync()
     {
@@ -670,4 +765,9 @@ public class TestConnectionRequest
     /// Gets or sets the API key to try.
     /// </summary>
     public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full-access key for Auto-Sync to try.
+    /// </summary>
+    public string? AdminApiKey { get; set; }
 }

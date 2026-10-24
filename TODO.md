@@ -203,7 +203,7 @@ things users already run into.
 - **Done when:** The button opens a different title each time.
 - **Size:** S
 
-### [ ] 4.3 Auto-Sync overview
+### [x] 4.3 Auto-Sync overview
 
 - **Why:** You can switch Auto-Sync on per title, but there is no list of
   what it follows and when it last ran.

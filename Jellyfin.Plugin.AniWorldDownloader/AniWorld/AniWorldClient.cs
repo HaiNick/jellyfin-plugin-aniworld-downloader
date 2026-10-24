@@ -46,6 +46,11 @@ public class AniWorldClient
     public static bool IsConfigured => !string.IsNullOrWhiteSpace(Config.AniWorldUrl);
 
     /// <summary>
+    /// Gets a value indicating whether a full-access key for the Auto-Sync overview is set.
+    /// </summary>
+    public static bool HasAdminKey => IsConfigured && !string.IsNullOrWhiteSpace(Config.AdminApiKey);
+
+    /// <summary>
     /// Calls an AniWorld API endpoint with the saved URL and key.
     /// </summary>
     /// <param name="method">The HTTP method.</param>
@@ -64,6 +69,20 @@ public class AniWorldClient
         bool quiet = false)
     {
         return SendAsync(Config.AniWorldUrl, Config.ApiKey, method, path, query, body, cancellationToken, quiet);
+    }
+
+    /// <summary>
+    /// Calls an AniWorld API endpoint with the saved URL and the full-access
+    /// key, for the Auto-Sync overview.
+    /// </summary>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The path below /api/.</param>
+    /// <param name="body">A JSON body, or null.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The status and the JSON reply, with poster links rewritten.</returns>
+    public Task<AniWorldReply> SendAdminAsync(HttpMethod method, string path, JsonNode? body, CancellationToken cancellationToken)
+    {
+        return SendAsync(Config.AniWorldUrl, Config.AdminApiKey, method, path, null, body, cancellationToken);
     }
 
     /// <summary>
