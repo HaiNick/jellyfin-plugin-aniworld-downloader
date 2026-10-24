@@ -27,6 +27,11 @@ Made on 2026-10-24:
 - **Item 3:** instant filters only (type, site, in library). Genre browsing
   goes on the start page instead of a genre filter on search results. No
   year or language filter.
+- **Minimal, sized to the data** (2026-10-24, after testing 0.2.2.16 to
+  0.2.2.18): don't recreate Jellyfin's item page. AniWorld has one small
+  poster and short text per title, so backdrops, large thumbnails and hero
+  banners end up as placeholders. Use compact layouts, and images only
+  where real ones exist. This replaces the "How" of items 1 and 2.
 - **Item 2:** the "Continue" row is for every user. It needs a read-only
   plugin endpoint that lists tracked series (title, URL, poster) through the
   Auto-Sync key. Confirm the endpoint's shape before building it.
@@ -205,3 +210,13 @@ Checked in AniWorld Downloader's code and in real replies:
   - The preview's fake **Download** and sync runs now queue jobs that run,
     with ffmpeg-like progress, and the second episode fails.
   - Next: check on the server.
+- 2026-10-24: Item-page look rejected on the server ("too little content,
+  not enough images"). Reworked in the preview only, not yet committed:
+  - Title page: a compact head (8em poster, 6em on phones, next to name,
+    year · site, genres, buttons; overview cut to 3 lines). The tabs are
+    back. No backdrop, and no episode thumbnails or overviews. Episodes
+    are compact rows: box, "1. Title", languages · In your library. Jellyfin's
+    episode list is still read, without images, for "In your library".
+  - Queue: two lines per job, title and one line of details; a running job
+    leads with progress and leaves out language and hoster.
+  - Next: the user's verdict on the preview screenshots.

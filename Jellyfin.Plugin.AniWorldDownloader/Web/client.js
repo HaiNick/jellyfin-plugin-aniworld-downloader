@@ -428,12 +428,22 @@
             P + ' .cardImageContainer.aniworld-has-image > .cardDefaultText,' +
             P + ' .cardImageContainer.aniworld-has-image > .cardImageIcon{display:none}',
 
-            // Title page: Jellyfin's item page classes do the layout
-            P + ' .aniworld-inner-title{padding-top:0}',
-            // The stretched poster, half see-through so the theme's page
-            // colour dims it
-            P + ' .aniworld-backdrop{overflow:hidden}',
-            P + ' .aniworld-backdrop-poster{position:absolute;top:0;left:0;width:100%;height:100%;opacity:.5}',
+            // Title page: a small poster beside the name, the overview under
+            // the name, and on phones under both
+            P + ' .aniworld-head{display:grid;grid-template-columns:8em minmax(0,1fr);grid-template-areas:"poster text" "poster overview";' +
+            'gap:0 1.5em;align-items:start;max-width:60em;margin-bottom:1.5em}',
+            P + ' .aniworld-head > .card{grid-area:poster;width:100%;margin:0}',
+            P + ' .aniworld-head .cardBox{margin:0}',
+            P + ' .aniworld-head-text{grid-area:text;min-width:0}',
+            P + ' .aniworld-head-overview{grid-area:overview;min-width:0}',
+            P + ' .aniworld-head .itemName{margin:0 0 .25em;white-space:normal}',
+            // jellyfin-web centres these on phones, for its own item page
+            P + ' .aniworld-head .itemName,' + P + ' .aniworld-head .itemMiscInfo,' + P + ' .aniworld-head .mainDetailButtons' +
+            '{text-align:start;justify-content:flex-start}',
+            P + ' .aniworld-head .itemGenres{margin:.5em 0}',
+            P + ' .aniworld-head .mainDetailButtons{margin:0;flex-wrap:wrap}',
+            P + ' .aniworld-head .overview{margin:.75em 0 0}',
+            P + ' .aniworld-clamp{overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3}',
             // mediainfo's own spacing only loads with the player pages
             P + ' .itemMiscInfo .mediaInfoItem{margin-right:1em}',
             P + ' .overview-expand{margin:0}',
@@ -461,7 +471,11 @@
             P + ' .aniworld-errors-list{padding:0 1em .5em 3.5em}',
             P + ' .aniworld-errors-list .fieldDescription{margin:.25em 0;overflow-wrap:anywhere}',
             P + ' .aniworld-queue-more{margin:1em 0 0}',
-            P + ' .aniworld-history{margin:.5em 0 1em}'
+            P + ' .aniworld-history{margin:.5em 0 1em}',
+
+            '@media (max-width:40em){' +
+            P + ' .aniworld-head{grid-template-columns:6em minmax(0,1fr);grid-template-areas:"poster text" "overview overview";gap:0 1em}' +
+            P + ' .aniworld-head .itemName{font-size:1.4em}}'
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -917,8 +931,9 @@
         return client.ajax({ type: 'GET', url: client.getUrl(path, params), dataType: 'json' });
     }
 
-    // A library title's episodes by "season:episode", for their thumbnails and
-    // overviews. Empty when it isn't a series or Jellyfin can't say.
+    // A library title's episodes by "season:episode", so the ones Jellyfin
+    // already has count as in the library even when AniWorld doesn't know them.
+    // Empty when it isn't a series or Jellyfin can't say.
     function libraryEpisodes(itemId) {
         if (!itemId) {
             return Promise.resolve({});
@@ -927,8 +942,8 @@
         return cached('library|' + itemId, function () {
             return jellyfinGet('Shows/' + itemId + '/Episodes', {
                 UserId: window.ApiClient.getCurrentUserId(),
-                Fields: 'Overview',
-                IsMissing: false
+                IsMissing: false,
+                EnableImages: false
             }).then(function (reply) {
                 var byNumber = {};
                 (reply.Items || []).forEach(function (item) {
@@ -948,49 +963,6 @@
         });
     }
 
-    // Behind the title: Jellyfin's backdrop when the title is in the library,
-    // otherwise its poster drawn a few pixels small and stretched. The browser
-    // smooths that into a blur without a CSS filter, and the canvas is only
-    // drawn, never read, so a poster from another origin is fine.
-    function showBackdrop(box, series) {
-        function fromPoster() {
-            if (!series.poster_url) {
-                return;
-            }
-
-            var img = new Image();
-            img.onload = function () {
-                if (!box.isConnected || !img.naturalWidth) {
-                    return;
-                }
-
-                var canvas = document.createElement('canvas');
-                canvas.width = 32;
-                canvas.height = 18;
-                // The middle of the poster, cut to the backdrop's 16:9
-                var height = Math.min(img.naturalHeight, img.naturalWidth * 9 / 16);
-                canvas.getContext('2d').drawImage(img, 0, (img.naturalHeight - height) / 2, img.naturalWidth, height, 0, 0, 32, 18);
-                canvas.className = 'aniworld-backdrop-poster';
-                box.appendChild(canvas);
-            };
-            img.src = imageUrl(series.poster_url);
-        }
-
-        if (!series.libraryItemId) {
-            fromPoster();
-            return;
-        }
-
-        var width = Math.min(1920, Math.round(window.innerWidth * (window.devicePixelRatio || 1)));
-        var src = window.ApiClient.getUrl('Items/' + series.libraryItemId + '/Images/Backdrop/0', { maxWidth: width, quality: 80 });
-        var img = new Image();
-        img.onload = function () {
-            box.style.backgroundImage = 'url("' + src + '")';
-        };
-        img.onerror = fromPoster;
-        img.src = src;
-    }
-
     // ------------------------------------------------------------------
     // Detail view
     // ------------------------------------------------------------------
@@ -999,41 +971,33 @@
             escapeHtml(title) + '"><div class="detailButton-content">' + materialIcon(icon, 'detailButton-icon') + '</div></' + tag + '>';
     }
 
-    // Jellyfin's item page (itemDetails.html), with our episodes and download
-    // bar where it lists a series' seasons
+    // A compact head sized to what AniWorld has: a small poster beside the
+    // name, then the episodes. No backdrop or large images, which AniWorld
+    // doesn't have and which would only be placeholders.
     function renderDetail(inner, params, info) {
         var url = params.get('u');
-        var body = inner;
-        var poster = cardHtml({ title: '', footer: false });
+        var body = renderShell(inner, info, 'search');
         body.innerHTML =
-            '<div class="itemBackdrop aniworld-backdrop"></div>' +
-            '<div class="detailPageWrapperContainer">' +
-            '<div class="detailPagePrimaryContainer">' +
-            '<div class="detailImageContainer hide-mobile">' + poster + '</div>' +
-            '<div class="detailRibbon padded-left padded-right">' +
-            '<div class="infoWrapper">' +
-            '<div class="detailImageContainer hide-desktop hide-tv">' + poster + '</div>' +
-            '<div class="nameContainer"><h1 class="itemName infoText parentNameLast">…</h1></div>' +
+            '<div class="aniworld-head">' +
+            cardHtml({ title: '', footer: false }) +
+            '<div class="aniworld-head-text">' +
+            '<h1 class="itemName infoText">…</h1>' +
             '<div class="itemMiscInfo itemMiscInfo-primary"></div>' +
-            '</div>' +
-            '<div class="mainDetailButtons focuscontainer-x"></div>' +
-            '</div>' +
-            '<div class="detailPagePrimaryContent padded-right">' +
-            '<div class="detailSection"><div class="detailSectionContent">' +
             '<p class="itemGenres"></p>' +
-            '<p class="overview detail-clamp-text"></p>' +
-            '<div class="overview-controls"><button type="button" class="button-link emby-button overview-expand" hidden>Show more</button></div>' +
-            '</div></div></div></div>' +
-            '<div class="detailPageSecondaryContainer padded-left padded-right padded-bottom-page">' +
-            '<div class="verticalSection detailVerticalSection aniworld-sync" hidden></div>' +
-            '<div class="verticalSection detailVerticalSection">' +
+            '<div class="mainDetailButtons"></div>' +
+            '</div>' +
+            '<div class="aniworld-head-overview detailSectionContent">' +
+            '<p class="overview aniworld-clamp"></p>' +
+            '<button type="button" class="button-link emby-button overview-expand" hidden>Show more</button>' +
+            '</div></div>' +
+            '<div class="verticalSection aniworld-sync" hidden></div>' +
+            '<div class="verticalSection">' +
             '<h2 class="sectionTitle sectionTitle-cards">Episodes</h2>' +
             '<div class="aniworld-pickers"></div>' +
             '<div class="aniworld-status">Loading…</div>' +
-            '<div class="itemsContainer vertical-list aniworld-episodes"></div>' +
+            '<div class="itemsContainer vertical-list paperList aniworld-episodes"></div>' +
             '</div>' +
-            '<div class="aniworld-actions"></div>' +
-            '</div></div>';
+            '<div class="aniworld-actions"></div>';
 
         var view = renderedHash;
         var status = body.querySelector('.aniworld-status');
@@ -1063,17 +1027,15 @@
             // Only offer "Show more" when the clamp actually cuts something off
             more.hidden = overview.scrollHeight <= overview.clientHeight + 2;
             more.addEventListener('click', function () {
-                var open = !overview.classList.toggle('detail-clamp-text');
+                var open = !overview.classList.toggle('aniworld-clamp');
                 more.textContent = open ? 'Show less' : 'Show more';
             });
 
-            body.querySelectorAll('.detailImageContainer .cardImageContainer').forEach(function (image) {
-                image.querySelector('bdi').textContent = title;
-                if (series.poster_url) {
-                    showPoster(image, series.poster_url);
-                }
-            });
-            showBackdrop(body.querySelector('.aniworld-backdrop'), series);
+            var image = body.querySelector('.aniworld-head .cardImageContainer');
+            image.querySelector('bdi').textContent = title;
+            if (series.poster_url) {
+                showPoster(image, series.poster_url);
+            }
 
             var buttons = [];
             if (series.libraryItemId) {
@@ -1337,66 +1299,68 @@
             ];
         }
 
-        // The running item's lines: which episode, and how fast and how long
-        function runningLines(item, ffmpeg) {
+        // The running item's line: which episode, how fast and how long. The
+        // language and hoster wait until it's done.
+        function runningParts(item, ffmpeg) {
             var total = item.total_episodes || 1;
             var percent = ffmpeg.active ? Number(ffmpeg.percent) || 0 : 0;
             // current_episode counts the episodes already done
             var episode = Math.min(total, (item.current_episode || 0) + 1);
-            var where = total > 1 ? 'Episode ' + episode + ' of ' + total : '';
+            var where = total > 1 ? episode + ' of ' + total : '';
             var label = episodeLabel(item.current_url);
-            var first = [where && label ? where + ', ' + label : where || label].concat(sourceParts(item));
+            var parts = [label && where ? label + ' (' + where + ')' : label || where];
 
-            var second = [];
             if (ffmpeg.active) {
-                second.push(Math.round(percent) + '%');
-                second.push(ffmpeg.bandwidth || ffmpeg.speed);
+                parts.push(Math.round(percent) + '%');
+                parts.push(ffmpeg.bandwidth || ffmpeg.speed);
                 var left = episodeSecondsLeft(ffmpeg);
                 if (left !== null) {
-                    second.push(formatDuration(left) + ' left' + (total > 1 ? ' in this episode' : ''));
+                    parts.push(formatDuration(left) + ' left' + (total > 1 ? ' in this one' : ''));
                 }
             } else {
-                second.push('Starting…');
+                parts.push('Starting…');
             }
 
             // The whole job from how long it took so far; only once there is
             // enough of it to go by
             var fraction = (episode - 1 + percent / 100) / total;
             if (total > 1 && fraction > 0.02 && item.duration_seconds > 30) {
-                second.push('about ' + formatDuration(item.duration_seconds * (1 - fraction) / fraction) + ' for all ' + total);
+                parts.push('about ' + formatDuration(item.duration_seconds * (1 - fraction) / fraction) + ' for all');
             }
 
-            return { lines: [first, second], fraction: fraction };
+            parts.push(item.source === 'autosync' ? 'Auto-Sync' : '', item.requestedBy ? 'started by ' + item.requestedBy : '');
+            return { parts: parts, fraction: fraction };
         }
 
-        function finishedLine(item) {
+        function finishedParts(item) {
             var at = item.completed_at ? relativeTime(queueTime(item.completed_at)) : '';
             var known = STATUS[item.status] || { label: item.status };
             return [known.label + (at ? ' ' + at : ''), item.duration_seconds ? 'took ' + formatDuration(item.duration_seconds) : ''];
         }
 
-        // A list item like the ones on Jellyfin's dashboard
+        // A list item like the ones on Jellyfin's dashboard: the title, and
+        // one line with the rest
         function itemHtml(item, ffmpeg) {
             var known = STATUS[item.status] || { label: item.status, icon: 'help_outline' };
             var count = item.total_episodes ? plural(item.total_episodes, 'episode') : '';
-            var lines;
+            var parts;
             var progress = '';
             if (item.status === 'running') {
-                var running = runningLines(item, ffmpeg);
-                lines = running.lines;
+                var running = runningParts(item, ffmpeg);
+                parts = running.parts;
                 progress = '<div class="itemProgressBar"><div class="itemProgressBarForeground" style="width:' +
                     Math.round(running.fraction * 100) + '%;"></div></div>';
             } else if (item.status === 'queued') {
-                lines = [[count].concat(sourceParts(item)), ['Added ' + relativeTime(queueTime(item.created_at))]];
+                parts = [count].concat(sourceParts(item), ['added ' + relativeTime(queueTime(item.created_at))]);
             } else {
-                lines = [[count].concat(sourceParts(item)), finishedLine(item)];
+                parts = finishedParts(item).concat([count], sourceParts(item));
             }
 
             var errors = queueErrors(item);
             var open = Boolean(openErrors[item.id]);
             // One episode that failed is just "Failed"; the button has the why
             if (errors.length && item.total_episodes > 1) {
-                lines[lines.length - 1].push(errors.length + ' of ' + plural(item.total_episodes, 'episode') + ' failed');
+                parts.splice(1, 0, errors.length + ' of ' + item.total_episodes + ' failed');
             }
 
             var buttons = (errors.length
@@ -1409,14 +1373,12 @@
             return '<div class="aniworld-queue-item">' +
                 '<div class="listItem listItem-border" data-status="' + escapeHtml(item.status) + '">' +
                 materialIcon(known.icon, 'listItemIcon listItemIcon-transparent') +
-                '<div class="listItemBody">' +
+                '<div class="listItemBody two-line">' +
                 '<div class="listItemBodyText"><bdi>' + escapeHtml(item.title) + '</bdi></div>' +
-                lines.map(function (parts) {
-                    // MangaFire downloads have the same language and hoster
-                    return '<div class="listItemBodyText secondary">' + escapeHtml(parts.filter(function (part, i) {
-                        return part && parts.indexOf(part) === i;
-                    }).join(' · ')) + '</div>';
-                }).join('') +
+                // MangaFire downloads have the same language and hoster
+                '<div class="listItemBodyText secondary">' + escapeHtml(parts.filter(function (part, i) {
+                    return part && parts.indexOf(part) === i;
+                }).join(' · ')) + '</div>' +
                 progress + '</div>' + buttons + '</div>' +
                 (open
                     ? '<div class="aniworld-errors-list">' + errors.map(function (failure) {
@@ -1838,10 +1800,8 @@
         });
     };
 
-    // Episodes the way Jellyfin lists a season (listview.js with large images):
-    // thumbnail, "1. Title", the languages, and the overview, which phones
-    // show below the row. Thumbnails and overviews come from Jellyfin, so only
-    // episodes in the library have them.
+    // One compact row per episode: the box, "1. Title", and what languages it
+    // has and whether it's in the library
     DetailState.prototype.renderEpisodes = function () {
         var self = this;
         var list = this.inner.querySelector('.aniworld-episodes');
@@ -1856,45 +1816,25 @@
             var details = (ep.available_languages || []).map(function (lang) {
                 return LANGUAGE_SHORT[lang] || lang;
             });
-            var overview = copy && copy.Overview ? '<bdi>' + escapeHtml(copy.Overview) + '</bdi>' : '';
+            if (ep.inLibrary) {
+                details.push('In your library');
+            }
 
             var href = externalHref(ep.url);
             var ticked = self.tickMissing ? !ep.inLibrary : single;
-            return '<div class="listItem listItem-border listItem-largeImage listItem-withContentWrapper aniworld-episode" data-index="' + i + '">' +
-                '<div class="listItem-content">' +
-                '<div class="listItemImage listItemImage-large cardImageContainer ' + defaultBackground(name || String(i)) + '">' +
-                materialIcon(self.season.are_movies ? 'movie' : 'tv', 'cardImageIcon') +
-                (ep.inLibrary
-                    ? '<div class="indicators listItemIndicators"><div class="playedIndicator indicator" title="In your library">' +
-                    materialIcon('check', 'indicatorIcon') + '</div></div>'
-                    : '') +
-                '</div>' +
-                '<div class="listItemBody">' +
+            return '<div class="listItem listItem-border aniworld-episode" data-index="' + i + '">' +
+                checkboxHtml('aniworld-pick', ' data-index="' + i + '" aria-label="' + escapeHtml(heading) + '"' + (ticked ? ' checked' : '')) +
+                '<div class="listItemBody two-line">' +
                 '<div class="listItemBodyText"><bdi>' + escapeHtml(heading) + '</bdi></div>' +
-                // Not listItemMediaInfo, which phones hide: the languages matter here
-                '<div class="secondary listItemBodyText">' + escapeHtml(details.join(' · ')) + '</div>' +
-                (overview ? '<div class="secondary listItem-overview listItemBodyText">' + overview + '</div>' : '') +
+                '<div class="listItemBodyText secondary">' + escapeHtml(details.join(' · ')) + '</div>' +
                 '</div>' +
-                '<div class="listViewUserDataButtons">' +
                 (href
                     ? '<a class="paper-icon-button-light listItemButton" href="' + escapeHtml(href) +
                     '" target="_blank" rel="noopener noreferrer" title="Open on ' + escapeHtml(site) +
                     '" aria-label="' + escapeHtml(heading + ': open on ' + site) + '">' + materialIcon('open_in_new') + '</a>'
                     : '') +
-                checkboxHtml('aniworld-pick', ' data-index="' + i + '" aria-label="' + escapeHtml(heading) + '"' + (ticked ? ' checked' : '')) +
-                '</div></div>' +
-                (overview ? '<div class="listItem-bottomoverview secondary">' + overview + '</div>' : '') +
                 '</div>';
         }).join('');
-
-        list.querySelectorAll('.aniworld-episode').forEach(function (row) {
-            var ep = self.episodes[Number(row.getAttribute('data-index'))];
-            var copy = ep.libraryItem;
-            if (copy && copy.ImageTags && copy.ImageTags.Primary) {
-                lazyImage(row.querySelector('.listItemImage'), window.ApiClient.getUrl('Items/' + copy.Id + '/Images/Primary',
-                    { maxWidth: 400, tag: copy.ImageTags.Primary, quality: 80 }));
-            }
-        });
 
         // The whole row ticks the box, except the link out
         list.querySelectorAll('.aniworld-episode').forEach(function (row) {
@@ -2266,12 +2206,6 @@
             'client.js: ' + (window.AniWorldDownloaderBuild || 'unknown');
 
         var inner = page.querySelector('.aniworld-inner');
-        // A title's page runs edge to edge like Jellyfin's item page, whose
-        // own classes pad what's on it
-        var fullWidth = Boolean(params.get('u')) && !params.get('view');
-        inner.classList.toggle('padded-left', !fullWidth);
-        inner.classList.toggle('padded-right', !fullWidth);
-        inner.classList.toggle('aniworld-inner-title', fullWidth);
         setTitle(LABEL);
         inner.innerHTML = '<div class="aniworld-status">Loading…</div>';
         getInfo().then(function (info) {
