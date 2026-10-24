@@ -422,6 +422,106 @@ public class AniWorldProxyController : ControllerBase
     }
 
     /// <summary>
+    /// Queues a failed or cancelled download again. Needs the download
+    /// permission; whoever retries it gets the "done" message.
+    /// </summary>
+    /// <param name="id">The queue item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply.</returns>
+    [HttpPost("Queue/{id:int}/Retry")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> RetryQueueItem([FromRoute] int id, CancellationToken cancellationToken)
+    {
+        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
+        {
+            return denied;
+        }
+
+        var reply = await _aniWorld.SendAsync(HttpMethod.Post, $"queue/{id}/retry", null, null, cancellationToken).ConfigureAwait(false);
+        if (reply.Status == StatusCodes.Status200OK && await GetCallerAsync().ConfigureAwait(false) is { } caller)
+        {
+            // The owner was forgotten when it failed
+            _owners.Add(id, caller.User.Id);
+        }
+
+        return Reply(reply);
+    }
+
+    /// <summary>
+    /// Moves a waiting download one place up or down. Needs the download
+    /// permission.
+    /// </summary>
+    /// <param name="id">The queue item.</param>
+    /// <param name="request">Which way.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply.</returns>
+    [HttpPost("Queue/{id:int}/Move")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> MoveQueueItem([FromRoute] int id, [FromBody] MoveRequest request, CancellationToken cancellationToken)
+    {
+        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
+        {
+            return denied;
+        }
+
+        if (request.Direction is not ("up" or "down"))
+        {
+            return BadRequest(new JsonObject { ["error"] = "Direction must be up or down" });
+        }
+
+        var body = new JsonObject { ["direction"] = request.Direction };
+        return Reply(await _aniWorld.SendAsync(HttpMethod.Post, $"queue/{id}/move", null, body, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Removes a download from the queue; a running one has to be cancelled
+    /// first. Needs the download permission.
+    /// </summary>
+    /// <param name="id">The queue item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply.</returns>
+    [HttpDelete("Queue/{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> RemoveQueueItem([FromRoute] int id, CancellationToken cancellationToken)
+    {
+        if (await DenyDownloadAsync().ConfigureAwait(false) is { } denied)
+        {
+            return denied;
+        }
+
+        return Reply(await _aniWorld.SendAsync(HttpMethod.Delete, $"queue/{id}", null, null, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Removes every finished, failed and cancelled download from the queue.
+    /// Admins only, since it clears everyone's.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>AniWorld's reply.</returns>
+    [HttpDelete("Queue/Finished")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult> ClearFinishedQueueItems(CancellationToken cancellationToken)
+    {
+        var caller = await GetCallerAsync().ConfigureAwait(false);
+        if (caller is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!caller.IsAdmin)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new JsonObject { ["error"] = "Only admins can clear the finished downloads" });
+        }
+
+        return Reply(await _aniWorld.SendAsync(HttpMethod.Delete, "queue/completed", null, null, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>
     /// Queues episodes for download. Needs the download permission.
     /// </summary>
     /// <param name="request">What to download.</param>
@@ -775,6 +875,17 @@ public class DownloadRequest
     /// Gets or sets the series page URL.
     /// </summary>
     public string? SeriesUrl { get; set; }
+}
+
+/// <summary>
+/// Moving a waiting download in the queue.
+/// </summary>
+public class MoveRequest
+{
+    /// <summary>
+    /// Gets or sets the way to move it: up or down.
+    /// </summary>
+    public string? Direction { get; set; }
 }
 
 /// <summary>

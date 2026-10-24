@@ -29,8 +29,10 @@ and the official Android app.
   tracked series with its schedule, last check and result, and lets admins
   change a series' language, start point and schedule, check one series or
   all of them now, or stop syncing a series.
-- **Queue:** the downloads with live progress; users who may download can
-  cancel.
+- **Queue:** the downloads with live progress, speed and time left. Users
+  who may download can cancel, try a failed download again, move waiting
+  ones up or down, and remove finished ones; admins can clear all finished
+  downloads at once.
 - **Library scan:** a finished download shows up in Jellyfin within about a
   minute. A series already in the library gets only its own folder scanned;
   anything new starts a full library scan. A run of downloads ends in one
@@ -57,6 +59,10 @@ Everything is under `/AniWorldDownloader` and needs a Jellyfin login.
 | `GET Providers?url=` | anyone | Hosters per language |
 | `GET Queue?limit=&offset=&status=` | anyone | The download queue. For admins, waiting and running downloads carry `requestedBy`, the Jellyfin user who started them |
 | `POST Queue/{id}/Cancel` | may download | Cancel a queued or running download |
+| `POST Queue/{id}/Retry` | may download | Queue a failed or cancelled download again; the "done" message then goes to whoever retried it |
+| `POST Queue/{id}/Move` `{Direction}` | may download | Move a waiting download one place `up` or `down` |
+| `DELETE Queue/{id}` | may download | Remove a download that isn't running from the queue |
+| `DELETE Queue/Finished` | admins | Remove every finished, failed and cancelled download |
 | `POST Download` `{Episodes, Language, Provider, Title, SeriesUrl}` | may download | Queue episodes |
 | `GET/POST AutoSync/Tracked` | POST: may download | "Sync this with Auto-Sync" |
 | `GET AutoSync/Status` | admins, Auto-Sync key | Schedule, last run and every tracked series |

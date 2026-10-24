@@ -1339,8 +1339,9 @@
         }
 
         // A list item like the ones on Jellyfin's dashboard: the title, and
-        // one line with the rest
-        function itemHtml(item, ffmpeg) {
+        // one line with the rest. place says whether it's first or last in
+        // its group, for the move buttons.
+        function itemHtml(item, ffmpeg, place) {
             var known = STATUS[item.status] || { label: item.status, icon: 'help_outline' };
             var count = item.total_episodes ? plural(item.total_episodes, 'episode') : '';
             var parts;
@@ -1363,12 +1364,30 @@
                 parts.splice(1, 0, errors.length + ' of ' + item.total_episodes + ' failed');
             }
 
-            var buttons = (errors.length
-                ? iconButton('aniworld-errors', open ? 'expand_less' : 'expand_more', open ? 'Hide errors' : 'Show errors', ' data-id="' + item.id + '"')
-                : '') +
-                (info.canDownload && (item.status === 'queued' || item.status === 'running')
-                    ? iconButton('aniworld-cancel', 'close', 'Cancel', ' data-id="' + item.id + '"')
-                    : '');
+            // Only what fits the item's state, so a row has three buttons at most
+            function button(action, icon, title) {
+                return iconButton('aniworld-act', icon, title, ' data-action="' + action + '" data-id="' + item.id + '"');
+            }
+
+            var buttons = errors.length ? button('errors', open ? 'expand_less' : 'expand_more', open ? 'Hide errors' : 'Show errors') : '';
+            if (info.canDownload) {
+                if (item.status === 'queued') {
+                    buttons += (place.first ? '' : button('up', 'arrow_upward', 'Move up')) +
+                        (place.last ? '' : button('down', 'arrow_downward', 'Move down'));
+                }
+
+                if (item.status === 'queued' || item.status === 'running') {
+                    buttons += button('cancel', 'close', 'Cancel');
+                }
+
+                if (item.status === 'failed' || item.status === 'cancelled') {
+                    buttons += button('retry', 'replay', 'Try again');
+                }
+
+                if (item.status === 'completed' || item.status === 'failed' || item.status === 'cancelled') {
+                    buttons += button('remove', 'delete_outline', 'Remove from the queue');
+                }
+            }
 
             return '<div class="aniworld-queue-item">' +
                 '<div class="listItem listItem-border" data-status="' + escapeHtml(item.status) + '">' +
@@ -1389,39 +1408,99 @@
                 '</div>';
         }
 
+        // The newest reply, so a click can redraw without asking again
+        var lastQueue = null;
+        // "Clear" asks once on the button itself: the first click arms it
+        // for a few seconds, a second one clears
+        var clearArmedUntil = 0;
+
+        // Clears every finished download, admins only
+        function clearHtml(queue, shown) {
+            if (!info.isAdmin) {
+                return '';
+            }
+
+            var armed = Date.now() < clearArmedUntil;
+            var count = (queue.counts && queue.counts.finished) || shown;
+            return '<button type="button" class="raised emby-button" data-action="clear">' +
+                (armed ? 'Clear all ' + count + '?' : 'Clear') + '</button>';
+        }
+
         function draw(queue) {
+            lastQueue = queue;
             var items = queue.items || [];
             var ffmpeg = queue.ffmpeg_progress || {};
             status.textContent = items.length ? '' : 'Nothing in the queue.';
             list.innerHTML = QUEUE_GROUPS.map(function (group) {
                 var mine = items.filter(function (item) { return group.statuses.indexOf(item.status) >= 0; });
-                return mine.length
-                    ? sectionHtml(group.title, '', '<div class="paperList">' + mine.map(function (item) { return itemHtml(item, ffmpeg); }).join('') + '</div>')
-                    : '';
+                if (!mine.length) {
+                    return '';
+                }
+
+                var rows = '<div class="paperList">' + mine.map(function (item, i) {
+                    return itemHtml(item, ffmpeg, { first: i === 0, last: i === mine.length - 1 });
+                }).join('') + '</div>';
+                var clear = group.statuses.indexOf('completed') >= 0 ? clearHtml(queue, mine.length) : '';
+                return clear
+                    ? '<div class="verticalSection"><div class="aniworld-section-head">' +
+                    '<h2 class="sectionTitle sectionTitle-cards">' + escapeHtml(group.title) + '</h2>' + clear + '</div>' + rows + '</div>'
+                    : sectionHtml(group.title, '', rows);
             }).join('');
             more.hidden = !(queue.total > items.length);
             more.disabled = false;
-
-            list.querySelectorAll('.aniworld-errors').forEach(function (button) {
-                button.addEventListener('click', function () {
-                    var id = button.getAttribute('data-id');
-                    openErrors[id] = !openErrors[id];
-                    draw(queue);
-                });
-            });
-
-            list.querySelectorAll('.aniworld-cancel').forEach(function (button) {
-                button.addEventListener('click', function () {
-                    button.disabled = true;
-                    api('POST', 'Queue/' + button.getAttribute('data-id') + '/Cancel').then(function () {
-                        toast('Cancelled');
-                    }, function (err) {
-                        button.disabled = false;
-                        toast('Cancel failed: ' + err.message);
-                    });
-                });
-            });
         }
+
+        // What each button does; the server checks the permissions again
+        var ACTIONS = {
+            cancel: { method: 'POST', path: '/Cancel', done: 'Cancelled' },
+            retry: { method: 'POST', path: '/Retry', done: 'Queued again' },
+            up: { method: 'POST', path: '/Move', body: { Direction: 'up' } },
+            down: { method: 'POST', path: '/Move', body: { Direction: 'down' } },
+            remove: { method: 'DELETE', path: '', done: 'Removed from the queue' }
+        };
+
+        // One listener for every button, since each refresh redraws them
+        list.addEventListener('click', function (e) {
+            var button = e.target.closest('[data-action]');
+            if (!button || button.disabled || !lastQueue) {
+                return;
+            }
+
+            var action = button.getAttribute('data-action');
+            var id = button.getAttribute('data-id');
+            if (action === 'errors') {
+                openErrors[id] = !openErrors[id];
+                draw(lastQueue);
+                return;
+            }
+
+            if (action === 'clear' && Date.now() >= clearArmedUntil) {
+                clearArmedUntil = Date.now() + 4000;
+                draw(lastQueue);
+                window.setTimeout(function () {
+                    if (!isStale(view, inner) && lastQueue) {
+                        draw(lastQueue);
+                    }
+                }, 4100);
+                return;
+            }
+
+            var known = action === 'clear'
+                ? { method: 'DELETE', path: 'Queue/Finished', done: 'Cleared the finished downloads' }
+                : Object.assign({}, ACTIONS[action], { path: 'Queue/' + id + ACTIONS[action].path });
+            clearArmedUntil = 0;
+            button.disabled = true;
+            api(known.method, known.path, known.body).then(function () {
+                if (known.done) {
+                    toast(known.done);
+                }
+
+                poll();
+            }, function (err) {
+                button.disabled = false;
+                toast(err.message);
+            });
+        });
 
         poll();
     }

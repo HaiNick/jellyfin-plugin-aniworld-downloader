@@ -216,14 +216,63 @@
                 return item;
             }
 
+            // The captured queue; retry, remove and clear change it
+            var fixtureQueue = replies['GET Queue?limit=30'] || { items: [] };
+            var FINISHED = ['completed', 'failed', 'cancelled'];
+
             function queueReply() {
-                var reply = JSON.parse(JSON.stringify(replies['GET Queue?limit=30'] || { items: [] }));
+                var reply = JSON.parse(JSON.stringify(fixtureQueue));
                 var ffmpeg = { active: false, percent: 0, speed: '', time: '', bandwidth: '' };
                 var mine = jobs.map(function (job) { return jobNow(job, ffmpeg); });
                 reply.items = mine.concat(reply.items || []);
                 reply.total = (reply.total || 0) + mine.length;
+                // The captured queue's rows beyond the fixture are old, finished ones
+                reply.counts = Object.assign({}, reply.counts, {
+                    finished: reply.items.filter(function (item) { return FINISHED.indexOf(item.status) >= 0; }).length +
+                        Math.max(0, (fixtureQueue.total || 0) - fixtureQueue.items.length)
+                });
                 reply.ffmpeg_progress = ffmpeg;
                 return later(reply);
+            }
+
+            function queueAction(method, id, action) {
+                var item = fixtureQueue.items.filter(function (row) { return row.id === id; })[0];
+                var job = jobs.filter(function (row) { return row.id === id; })[0];
+                var done = job && jobNow(job, {});
+                var current = item || done;
+                if (!current) {
+                    return fail(404, 'Item not found');
+                }
+
+                if (method === 'DELETE') {
+                    if (current.status === 'running') {
+                        return fail(400, 'Cancel the item before removing it');
+                    }
+
+                    fixtureQueue.items = fixtureQueue.items.filter(function (row) { return row.id !== id; });
+                    fixtureQueue.total -= item ? 1 : 0;
+                    jobs = jobs.filter(function (row) { return row.id !== id; });
+                    return later({ ok: true });
+                }
+
+                if (action === 'Retry') {
+                    if (current.status !== 'failed' && current.status !== 'cancelled') {
+                        return fail(400, 'Item not found or not retryable');
+                    }
+
+                    // Runs again as one of this page's downloads
+                    fixtureQueue.items = fixtureQueue.items.filter(function (row) { return row.id !== id; });
+                    fixtureQueue.total -= item ? 1 : 0;
+                    jobs = jobs.filter(function (row) { return row.id !== id; });
+                    addJob({
+                        title: current.title, seriesUrl: current.series_url, language: current.language, provider: current.provider,
+                        source: current.source, episodes: new Array(current.total_episodes || 1).fill(current.current_url || '')
+                    });
+                    return later({ ok: true });
+                }
+
+                // Moving needs the real queue's order; here it only answers
+                return current.status === 'queued' ? later({ ok: true }) : fail(400, 'Only queued items can be moved');
             }
 
             // Pretends a sync ran: "running" for a few seconds, then each
@@ -327,6 +376,22 @@
                 if (method === 'POST' && (match = /^Queue\/(\d+)\/Cancel$/.exec(path))) {
                     jobs = jobs.filter(function (job) { return job.id !== Number(match[1]); });
                     return later({ ok: true });
+                }
+
+                if (method === 'DELETE' && path === 'Queue/Finished') {
+                    if (settings().admin === false) {
+                        return fail(403, 'Only admins can clear the finished downloads');
+                    }
+
+                    fixtureQueue.items = fixtureQueue.items.filter(function (row) { return FINISHED.indexOf(row.status) < 0; });
+                    fixtureQueue.total = fixtureQueue.items.length;
+                    fixtureQueue.counts = Object.assign({}, fixtureQueue.counts, { finished: 0 });
+                    jobs = jobs.filter(function (job) { return Date.now() < job.endAt; });
+                    return later({ ok: true });
+                }
+
+                if ((match = /^Queue\/(\d+)(?:\/(Retry|Move))?$/.exec(path)) && (method === 'DELETE' || match[2])) {
+                    return queueAction(method, Number(match[1]), match[2]);
                 }
 
                 if (method === 'GET' && /^Queue\?/.test(path)) {

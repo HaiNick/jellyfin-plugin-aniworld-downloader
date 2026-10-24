@@ -63,5 +63,7 @@ public class ControllerStartupTests
             .Select(s => s.AttributeRouteModel?.Template)
             .ToList();
         Assert.Contains("Image", routes);
+        Assert.Contains("Queue/{id:int}/Retry", routes);
+        Assert.Contains("Queue/Finished", routes);
     }
 }

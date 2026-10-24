@@ -100,7 +100,12 @@ things users already run into.
   queue, and solving it there lets the download continue, also on a phone.
 - **Size:** M
 
-### [ ] 2.2 More queue actions
+### [x] 2.2 More queue actions
+
+- **Done** on 2026-10-24: retry, move and remove for users who may
+  download (as cancel already was), clear finished for admins only. Retry
+  makes the retrying user the owner again, since the owner is forgotten
+  when a download fails.
 
 - **Why:** The queue view can only cancel. Removing, reordering, retrying,
   and clearing finished items needs the downloader's own web UI.

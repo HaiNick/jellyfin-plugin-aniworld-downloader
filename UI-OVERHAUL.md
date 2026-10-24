@@ -220,3 +220,8 @@ Checked in AniWorld Downloader's code and in real replies:
   - Queue: two lines per job, title and one line of details; a running job
     leads with progress and leaves out language and hoster.
   - Next: the user's verdict on the preview screenshots.
+- 2026-10-24: The compact rework is in dev build 0.2.2.19. Before the
+  remaining items, TODO 2.2 (queue actions) was built: retry, move, remove
+  and clear, at most three buttons per row by state, and "Clear" asking
+  once on the button itself. Works in the preview, including as a
+  non-admin.
