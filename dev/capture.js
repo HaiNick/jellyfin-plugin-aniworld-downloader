@@ -55,7 +55,20 @@
 
     for (var i = 0; i < urls.length; i++) {
         var url = encodeURIComponent(urls[i]);
-        await keep('Series?url=' + url);
+        var series = await keep('Series?url=' + url);
+        // Jellyfin's own episodes of a title in the library, for the thumbnails
+        if (series && series.libraryItemId) {
+            var shows = await ApiClient.ajax({
+                type: 'GET',
+                url: ApiClient.getUrl('Shows/' + series.libraryItemId + '/Episodes',
+                    { UserId: ApiClient.getCurrentUserId(), Fields: 'Overview', IsMissing: false }),
+                dataType: 'json'
+            }).catch(function () { return null; });
+            if (shows) {
+                replies['GET Shows/' + series.libraryItemId + '/Episodes'] = shows;
+            }
+        }
+
         await keep('AutoSync/Tracked?url=' + url);
         var seasons = await keep('Seasons?url=' + url);
         // Episodes and hosters only for the first title, to keep the file small

@@ -357,24 +357,22 @@
             // Rows that scroll sideways, like the ones on Jellyfin's home page
             P + ' .aniworld-row{display:flex;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}',
             P + ' .aniworld-row > .card{flex:none;scroll-snap-align:start}',
-            P + ' .cardImageContainer.aniworld-has-image > .cardDefaultText{display:none}',
+            P + ' .cardImageContainer.aniworld-has-image > .cardDefaultText,' +
+            P + ' .cardImageContainer.aniworld-has-image > .cardImageIcon{display:none}',
 
-            // Title page: poster beside the text, like Jellyfin's item page
-            P + ' .aniworld-detail{display:grid;grid-template-columns:minmax(0,14em) minmax(0,1fr);grid-template-rows:auto 1fr;gap:0 2em;align-items:start}',
-            // The poster spans the name and the overview; on a phone the
-            // overview goes below both
-            P + ' .aniworld-detail .card{width:100%;margin:0;grid-row:span 2}',
-            P + ' .aniworld-detail-text{grid-column:2}',
-            P + ' .aniworld-detail .itemName{white-space:normal;margin-top:0}',
-            P + ' .aniworld-detail .mainDetailButtons{flex-wrap:wrap;margin:.5em 0}',
+            // Title page: Jellyfin's item page classes do the layout
+            P + ' .aniworld-inner-title{padding-top:0}',
+            // The stretched poster, half see-through so the theme's page
+            // colour dims it
+            P + ' .aniworld-backdrop{overflow:hidden}',
+            P + ' .aniworld-backdrop-poster{position:absolute;top:0;left:0;width:100%;height:100%;opacity:.5}',
             // mediainfo's own spacing only loads with the player pages
-            P + ' .aniworld-detail .mediaInfoItem{margin-right:1em}',
-            P + ' .aniworld-detail .overview{max-width:50em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}',
-            P + ' .aniworld-detail .overview.aniworld-open{display:block}',
+            P + ' .itemMiscInfo .mediaInfoItem{margin-right:1em}',
+            P + ' .overview-expand{margin:0}',
             P + ' .aniworld-pickers{display:flex;flex-wrap:wrap;gap:0 1em}',
             P + ' .aniworld-pickers .selectContainer{flex:1;min-width:10em;max-width:20em}',
             P + ' .aniworld-episode{cursor:pointer}',
-            P + ' .aniworld-episode .emby-checkbox-label{flex:none;width:auto;margin:0 .25em 0 .75em}',
+            P + ' .aniworld-episode .emby-checkbox-label{flex:none;width:auto;margin:0 .25em 0 .5em}',
             // Kept above the episode list; the theme's page colour behind it
             P + ' .aniworld-actions{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:.5em 1em;' +
             'padding:.75em 0;background:var(--aniworld-page-background,#101010)}',
@@ -390,13 +388,7 @@
             P + ' .aniworld-sync-item .listItemBodyText a{color:inherit;text-decoration:none}',
             P + ' .aniworld-section-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5em}',
             P + ' .aniworld-section-head .emby-button{margin:0}',
-            P + ' .listItem .itemProgressBar{margin-top:.5em}',
-
-            '@media (max-width:40em){' +
-            P + ' .aniworld-detail{grid-template-columns:7.5em minmax(0,1fr);grid-template-rows:auto;gap:0 1em}' +
-            P + ' .aniworld-detail .itemName{font-size:1.4em}' +
-            P + ' .aniworld-detail .card{grid-row:auto}' +
-            P + ' .aniworld-detail-text{grid-column:1 / -1}}'
+            P + ' .listItem .itemProgressBar{margin-top:.5em}'
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -753,7 +745,7 @@
 
         var image = card.querySelector('.cardImageContainer');
         if (item.poster_url) {
-            showPoster(image, item.poster_url);
+            lazyImage(image, imageUrl(item.poster_url));
         } else {
             // aniworld's search has no posters; fetch them as cards scroll in
             watchPoster(image, item.url);
@@ -762,15 +754,39 @@
         return card;
     }
 
-    // Swaps the default colour for the poster once it has loaded
-    function showPoster(target, path) {
+    // Swaps the default colour for the image once it has loaded
+    function showImage(target, src) {
         var img = new Image();
         img.onload = function () {
             target.style.backgroundImage = 'url("' + img.src + '")';
             target.className = target.className.replace(/\s*defaultCardBackground\d?/g, '');
             target.classList.add('aniworld-has-image');
         };
-        img.src = imageUrl(path);
+        img.src = src;
+    }
+
+    function showPoster(target, path) {
+        showImage(target, imageUrl(path));
+    }
+
+    // Loads an image only when it comes near the screen, also sideways in a row
+    var lazyObserver = 'IntersectionObserver' in window ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+                lazyObserver.unobserve(entry.target);
+                showImage(entry.target, entry.target.getAttribute('data-src'));
+            }
+        });
+    }, { rootMargin: '200px' }) : null;
+
+    function lazyImage(target, src) {
+        if (!lazyObserver) {
+            showImage(target, src);
+            return;
+        }
+
+        target.setAttribute('data-src', src);
+        lazyObserver.observe(target);
     }
 
     // At most a few detail lookups at once, so a long result list doesn't
@@ -822,6 +838,86 @@
         });
     }
 
+    // Jellyfin's own API, for what AniWorld doesn't have
+    function jellyfinGet(path, params) {
+        var client = window.ApiClient;
+        return client.ajax({ type: 'GET', url: client.getUrl(path, params), dataType: 'json' });
+    }
+
+    // A library title's episodes by "season:episode", for their thumbnails and
+    // overviews. Empty when it isn't a series or Jellyfin can't say.
+    function libraryEpisodes(itemId) {
+        if (!itemId) {
+            return Promise.resolve({});
+        }
+
+        return cached('library|' + itemId, function () {
+            return jellyfinGet('Shows/' + itemId + '/Episodes', {
+                UserId: window.ApiClient.getCurrentUserId(),
+                Fields: 'Overview',
+                IsMissing: false
+            }).then(function (reply) {
+                var byNumber = {};
+                (reply.Items || []).forEach(function (item) {
+                    if (item.ParentIndexNumber == null || item.IndexNumber == null) {
+                        return;
+                    }
+
+                    // One file can hold several episodes ("1-2")
+                    for (var n = item.IndexNumber; n <= (item.IndexNumberEnd || item.IndexNumber); n++) {
+                        byNumber[item.ParentIndexNumber + ':' + n] = item;
+                    }
+                });
+                return byNumber;
+            });
+        }).catch(function () {
+            return {};
+        });
+    }
+
+    // Behind the title: Jellyfin's backdrop when the title is in the library,
+    // otherwise its poster drawn a few pixels small and stretched. The browser
+    // smooths that into a blur without a CSS filter, and the canvas is only
+    // drawn, never read, so a poster from another origin is fine.
+    function showBackdrop(box, series) {
+        function fromPoster() {
+            if (!series.poster_url) {
+                return;
+            }
+
+            var img = new Image();
+            img.onload = function () {
+                if (!box.isConnected || !img.naturalWidth) {
+                    return;
+                }
+
+                var canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 18;
+                // The middle of the poster, cut to the backdrop's 16:9
+                var height = Math.min(img.naturalHeight, img.naturalWidth * 9 / 16);
+                canvas.getContext('2d').drawImage(img, 0, (img.naturalHeight - height) / 2, img.naturalWidth, height, 0, 0, 32, 18);
+                canvas.className = 'aniworld-backdrop-poster';
+                box.appendChild(canvas);
+            };
+            img.src = imageUrl(series.poster_url);
+        }
+
+        if (!series.libraryItemId) {
+            fromPoster();
+            return;
+        }
+
+        var width = Math.min(1920, Math.round(window.innerWidth * (window.devicePixelRatio || 1)));
+        var src = window.ApiClient.getUrl('Items/' + series.libraryItemId + '/Images/Backdrop/0', { maxWidth: width, quality: 80 });
+        var img = new Image();
+        img.onload = function () {
+            box.style.backgroundImage = 'url("' + src + '")';
+        };
+        img.onerror = fromPoster;
+        img.src = src;
+    }
+
     // ------------------------------------------------------------------
     // Detail view
     // ------------------------------------------------------------------
@@ -830,30 +926,41 @@
             escapeHtml(title) + '"><div class="detailButton-content">' + materialIcon(icon, 'detailButton-icon') + '</div></' + tag + '>';
     }
 
+    // Jellyfin's item page (itemDetails.html), with our episodes and download
+    // bar where it lists a series' seasons
     function renderDetail(inner, params, info) {
         var url = params.get('u');
-        var body = renderShell(inner, info, 'search');
+        var body = inner;
+        var poster = cardHtml({ title: '', footer: false });
         body.innerHTML =
-            '<div class="aniworld-detail">' +
-            cardHtml({ title: '', footer: false }) +
-            '<div class="aniworld-detail-head">' +
-            '<div class="nameContainer"><h1 class="itemName infoText">…</h1></div>' +
+            '<div class="itemBackdrop aniworld-backdrop"></div>' +
+            '<div class="detailPageWrapperContainer">' +
+            '<div class="detailPagePrimaryContainer">' +
+            '<div class="detailImageContainer hide-mobile">' + poster + '</div>' +
+            '<div class="detailRibbon padded-left padded-right">' +
+            '<div class="infoWrapper">' +
+            '<div class="detailImageContainer hide-desktop hide-tv">' + poster + '</div>' +
+            '<div class="nameContainer"><h1 class="itemName infoText parentNameLast">…</h1></div>' +
             '<div class="itemMiscInfo itemMiscInfo-primary"></div>' +
-            '<div class="mainDetailButtons"></div>' +
             '</div>' +
-            '<div class="aniworld-detail-text detailSectionContent">' +
+            '<div class="mainDetailButtons focuscontainer-x"></div>' +
+            '</div>' +
+            '<div class="detailPagePrimaryContent padded-right">' +
+            '<div class="detailSection"><div class="detailSectionContent">' +
             '<p class="itemGenres"></p>' +
-            '<p class="overview"></p>' +
-            '<button type="button" class="button-link emby-button aniworld-more" hidden>Show more</button>' +
-            '</div></div>' +
-            '<div class="verticalSection aniworld-sync" hidden></div>' +
-            '<div class="verticalSection">' +
+            '<p class="overview detail-clamp-text"></p>' +
+            '<div class="overview-controls"><button type="button" class="button-link emby-button overview-expand" hidden>Show more</button></div>' +
+            '</div></div></div></div>' +
+            '<div class="detailPageSecondaryContainer padded-left padded-right padded-bottom-page">' +
+            '<div class="verticalSection detailVerticalSection aniworld-sync" hidden></div>' +
+            '<div class="verticalSection detailVerticalSection">' +
             '<h2 class="sectionTitle sectionTitle-cards">Episodes</h2>' +
             '<div class="aniworld-pickers"></div>' +
             '<div class="aniworld-status">Loading…</div>' +
-            '<div class="itemsContainer vertical-list paperList aniworld-episodes"></div>' +
+            '<div class="itemsContainer vertical-list aniworld-episodes"></div>' +
             '</div>' +
-            '<div class="aniworld-actions"></div>';
+            '<div class="aniworld-actions"></div>' +
+            '</div></div>';
 
         var view = renderedHash;
         var status = body.querySelector('.aniworld-status');
@@ -870,24 +977,30 @@
                     return '<div class="mediaInfoItem">' + escapeHtml(part) + '</div>';
                 }).join('');
             var genres = body.querySelector('.itemGenres');
-            genres.textContent = (series.genres || []).length ? 'Genres: ' + series.genres.slice(0, 8).join(', ') : '';
+            // AniWorld lists its languages among the genres ("GerSub", "EngSub", "Ger")
+            var genreNames = (series.genres || []).filter(function (name) {
+                return !/^(Ger|Eng)(Sub|Dub)?$/i.test(name);
+            });
+            genres.textContent = genreNames.length ? 'Genres: ' + genreNames.slice(0, 8).join(', ') : '';
             genres.hidden = !genres.textContent;
 
             var overview = body.querySelector('.overview');
-            var more = body.querySelector('.aniworld-more');
+            var more = body.querySelector('.overview-expand');
             overview.textContent = series.description || '';
-            // Only offer "Show more" when the four lines actually cut something off
+            // Only offer "Show more" when the clamp actually cuts something off
             more.hidden = overview.scrollHeight <= overview.clientHeight + 2;
             more.addEventListener('click', function () {
-                var open = overview.classList.toggle('aniworld-open');
+                var open = !overview.classList.toggle('detail-clamp-text');
                 more.textContent = open ? 'Show less' : 'Show more';
             });
 
-            var image = body.querySelector('.aniworld-detail .cardImageContainer');
-            image.querySelector('bdi').textContent = title;
-            if (series.poster_url) {
-                showPoster(image, series.poster_url);
-            }
+            body.querySelectorAll('.detailImageContainer .cardImageContainer').forEach(function (image) {
+                image.querySelector('bdi').textContent = title;
+                if (series.poster_url) {
+                    showPoster(image, series.poster_url);
+                }
+            });
+            showBackdrop(body.querySelector('.aniworld-backdrop'), series);
 
             var buttons = [];
             if (series.libraryItemId) {
@@ -1434,6 +1547,12 @@
         this.info = info;
         this.season = seasons[0];
         this.episodes = [];
+        // Jellyfin's copies of the episodes, when the title is in the library
+        this.library = getSeries(seriesUrl).then(function (series) {
+            return libraryEpisodes(series.libraryItemId);
+        }, function () {
+            return {};
+        });
         this.providers = null;
         this.languageSelect = null;
         this.providerSelect = null;
@@ -1479,18 +1598,23 @@
         this.episodes = [];
         this.updateActions();
 
-        cached('episodes|' + season.url, function () {
+        Promise.all([cached('episodes|' + season.url, function () {
             return api('GET', 'Episodes?url=' + encodeURIComponent(season.url) +
                 '&seriesUrl=' + encodeURIComponent(self.seriesUrl));
-        }).then(function (reply) {
+        }), this.library]).then(function (replies) {
             if (season !== self.season || !list.isConnected) {
                 return;
             }
 
-            self.episodes = reply.episodes || [];
+            var library = replies[1];
+            self.episodes = (replies[0].episodes || []).map(function (ep) {
+                // AniWorld's movies have no season number Jellyfin would share
+                var copy = season.are_movies ? null : library[season.season_number + ':' + ep.episode_number];
+                return Object.assign({}, ep, { libraryItem: copy || null, inLibrary: ep.downloaded || Boolean(copy) });
+            });
             status.textContent = self.episodes.length ? '' : 'No episodes in this season.';
             if (self.tickMissing && self.episodes.length) {
-                var missing = self.episodes.filter(function (ep) { return !ep.downloaded; }).length;
+                var missing = self.episodes.filter(function (ep) { return !ep.inLibrary; }).length;
                 status.textContent = missing
                     ? 'Ticked the ' + plural(missing, 'episode') + ' of this season you don’t have yet.'
                     : 'You already have every episode of this season.';
@@ -1504,40 +1628,63 @@
         });
     };
 
-    // Episodes as Jellyfin lists them: "1. Title", with the languages below
+    // Episodes the way Jellyfin lists a season (listview.js with large images):
+    // thumbnail, "1. Title", the languages, and the overview, which phones
+    // show below the row. Thumbnails and overviews come from Jellyfin, so only
+    // episodes in the library have them.
     DetailState.prototype.renderEpisodes = function () {
         var self = this;
         var list = this.inner.querySelector('.aniworld-episodes');
         var single = this.episodes.length === 1;
         var site = siteName(siteFromUrl(this.seriesUrl));
         list.innerHTML = this.episodes.map(function (ep, i) {
-            var name = ep.title_de || ep.title_en || '';
+            var copy = ep.libraryItem;
+            var name = ep.title_de || ep.title_en || (copy && copy.Name) || '';
             var heading = self.season.are_movies
                 ? name || 'Movie'
                 : ep.episode_number + '. ' + (name || 'Episode ' + ep.episode_number);
             var details = (ep.available_languages || []).map(function (lang) {
                 return LANGUAGE_SHORT[lang] || lang;
             });
-            if (ep.downloaded) {
-                details.push('In your library');
-            }
+            var overview = copy && copy.Overview ? '<bdi>' + escapeHtml(copy.Overview) + '</bdi>' : '';
 
             var href = externalHref(ep.url);
-            var ticked = self.tickMissing ? !ep.downloaded : single;
-            return '<div class="listItem listItem-border aniworld-episode" data-index="' + i + '">' +
-                checkboxHtml('aniworld-pick', ' data-index="' + i + '" aria-label="' + escapeHtml(heading) + '"' + (ticked ? ' checked' : '')) +
-                '<div class="listItemBody two-line">' +
-                '<div class="listItemBodyText"><bdi>' + escapeHtml(heading) + '</bdi></div>' +
-                '<div class="listItemBodyText secondary">' + escapeHtml(details.join(' · ')) + '</div>' +
+            var ticked = self.tickMissing ? !ep.inLibrary : single;
+            return '<div class="listItem listItem-border listItem-largeImage listItem-withContentWrapper aniworld-episode" data-index="' + i + '">' +
+                '<div class="listItem-content">' +
+                '<div class="listItemImage listItemImage-large cardImageContainer ' + defaultBackground(name || String(i)) + '">' +
+                materialIcon(self.season.are_movies ? 'movie' : 'tv', 'cardImageIcon') +
+                (ep.inLibrary
+                    ? '<div class="indicators listItemIndicators"><div class="playedIndicator indicator" title="In your library">' +
+                    materialIcon('check', 'indicatorIcon') + '</div></div>'
+                    : '') +
                 '</div>' +
-                (ep.downloaded ? materialIcon('check', 'listItemAside') : '') +
+                '<div class="listItemBody">' +
+                '<div class="listItemBodyText"><bdi>' + escapeHtml(heading) + '</bdi></div>' +
+                // Not listItemMediaInfo, which phones hide: the languages matter here
+                '<div class="secondary listItemBodyText">' + escapeHtml(details.join(' · ')) + '</div>' +
+                (overview ? '<div class="secondary listItem-overview listItemBodyText">' + overview + '</div>' : '') +
+                '</div>' +
+                '<div class="listViewUserDataButtons">' +
                 (href
                     ? '<a class="paper-icon-button-light listItemButton" href="' + escapeHtml(href) +
                     '" target="_blank" rel="noopener noreferrer" title="Open on ' + escapeHtml(site) +
                     '" aria-label="' + escapeHtml(heading + ': open on ' + site) + '">' + materialIcon('open_in_new') + '</a>'
                     : '') +
+                checkboxHtml('aniworld-pick', ' data-index="' + i + '" aria-label="' + escapeHtml(heading) + '"' + (ticked ? ' checked' : '')) +
+                '</div></div>' +
+                (overview ? '<div class="listItem-bottomoverview secondary">' + overview + '</div>' : '') +
                 '</div>';
         }).join('');
+
+        list.querySelectorAll('.aniworld-episode').forEach(function (row) {
+            var ep = self.episodes[Number(row.getAttribute('data-index'))];
+            var copy = ep.libraryItem;
+            if (copy && copy.ImageTags && copy.ImageTags.Primary) {
+                lazyImage(row.querySelector('.listItemImage'), window.ApiClient.getUrl('Items/' + copy.Id + '/Images/Primary',
+                    { maxWidth: 400, tag: copy.ImageTags.Primary, quality: 80 }));
+            }
+        });
 
         // The whole row ticks the box, except the link out
         list.querySelectorAll('.aniworld-episode').forEach(function (row) {
@@ -1883,6 +2030,12 @@
             'client.js: ' + (window.AniWorldDownloaderBuild || 'unknown');
 
         var inner = page.querySelector('.aniworld-inner');
+        // A title's page runs edge to edge like Jellyfin's item page, whose
+        // own classes pad what's on it
+        var fullWidth = Boolean(params.get('u')) && !params.get('view');
+        inner.classList.toggle('padded-left', !fullWidth);
+        inner.classList.toggle('padded-right', !fullWidth);
+        inner.classList.toggle('aniworld-inner-title', fullWidth);
         setTitle(LABEL);
         inner.innerHTML = '<div class="aniworld-status">Loading…</div>';
         getInfo().then(function (info) {

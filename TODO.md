@@ -184,6 +184,8 @@ things users already run into.
 
 ### [ ] 4.1 Browse by genre
 
+- **Moved** on 2026-10-24 into item 2 of [UI-OVERHAUL.md](UI-OVERHAUL.md),
+  as genre rows on the start page instead of chips.
 - **Why:** The start page shows only the "new" and "popular" lists.
 - **Where:** New proxy endpoints; `renderBrowse` in `Web/client.js`
   (line 575).

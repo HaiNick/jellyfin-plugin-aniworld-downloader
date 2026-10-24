@@ -48,6 +48,10 @@
         })();
     </script>
     <style>
+        /* From the inline <style> in jellyfin-web's index.html */
+        html { background-color: #101010; color: rgba(255, 255, 255, .7); }
+        .hide, .layout-desktop .hide-desktop, .layout-mobile .hide-mobile, .layout-tv .hide-tv { display: none !important; }
+
         body { margin: 0; }
         .preview-header { display: flex; align-items: center; gap: 1.5em; padding: .9em 1.5em; font: 500 .9em sans-serif; }
         .preview-header a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .3em; }
@@ -60,7 +64,8 @@
         .preview-missing { font: 16px sans-serif; padding: 2em; max-width: 40em; line-height: 1.5; }
     </style>
 </head>
-<body class="libraryDocument">
+<!-- jellyfin-web sets dir on body too; its item page CSS needs it there -->
+<body class="libraryDocument" dir="ltr">
     <div class="preview-frame">
         <!-- client.js clones the Favorites link into its own nav entry -->
         <div class="preview-header">
@@ -232,6 +237,12 @@
                     return later(replies['GET Queue?limit=30'] || { items: [] });
                 }
 
+                // Jellyfin's own calls are kept without their query, which
+                // carries the user ID
+                if (method === 'GET' && (match = /^(Shows\/[^/]+\/Episodes)\?/.exec(path))) {
+                    return replies['GET ' + match[1]] ? later(replies['GET ' + match[1]]) : fail(404, 'Not in the fixtures: ' + key);
+                }
+
                 if (replies[key]) {
                     return later(replies[key]);
                 }
@@ -249,7 +260,8 @@
                     return fixtures.server + '/' + path.replace(/^\//, '') + query;
                 },
                 ajax: function (options) {
-                    var path = options.url.indexOf(PREFIX) === 0 ? options.url.slice(PREFIX.length) : options.url;
+                    var path = options.url.indexOf(PREFIX) === 0 ? options.url.slice(PREFIX.length)
+                        : options.url.indexOf(fixtures.server + '/') === 0 ? options.url.slice(fixtures.server.length + 1) : options.url;
                     return answer(options.type || 'GET', path, options.data ? JSON.parse(options.data) : null);
                 },
                 getItem: function () { return Promise.reject(new Error('Not in the preview')); }
@@ -296,6 +308,11 @@
             // plugin's phone styles (they go by the window's width) kick in;
             // the toolbar then stays out here and steers the frame.
             var framed = window.self !== window.top;
+            if (framed) {
+                // What jellyfin-web sets on phones and in the Android app
+                document.documentElement.className = 'layout-mobile';
+            }
+
             var tools = document.querySelector('.preview-tools');
             var target = window;
             if (framed) {
