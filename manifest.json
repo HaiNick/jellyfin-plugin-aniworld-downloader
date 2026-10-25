@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.4.25",
+        "changelog": "Development build of missing-episodes at d4046cb. Not a release; it may break.\n\n- show missing episodes on Jellyfin's series and season pages",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.4.25/aniworld-downloader_0.2.4.25.zip",
+        "checksum": "0eee583dce04c6a57341a99541eb5db1",
+        "timestamp": "2026-10-25T17:29:15Z"
+      },
+      {
         "version": "0.2.3.24",
         "changelog": "Development build of search-filters at cfd2c80. Not a release; it may break.\n\n- keep list rows as wide as their list\n- style the start page's Show all button like the queue's Show more\n- put the layout switch next to the checkbox and use it on the start page too\n- filter search results in place and add a grid/list switch",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.16/aniworld-downloader_0.2.2.16.zip",
         "checksum": "2de8982dec542513694c9030d2a38275",
         "timestamp": "2026-10-24T17:53:22Z"
-      },
-      {
-        "version": "0.2.2.15",
-        "changelog": "Development build of autosync-page at 4bf0cc6. Not a release; it may break.\n\n- build the plugin page from Jellyfin's own components\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.15/aniworld-downloader_0.2.2.15.zip",
-        "checksum": "14601781a8a430da227825f7595d4229",
-        "timestamp": "2026-10-24T17:16:10Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
