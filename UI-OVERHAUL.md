@@ -108,7 +108,7 @@ Checked in AniWorld Downloader's code and in real replies:
 - **Done when:** A running download shows speed and time left, and an
   opened Auto-Sync series shows its recent jobs.
 
-### [ ] 3. Search filters and a grid/list switch
+### [x] 3. Search filters and a grid/list switch
 
 - **Why:** Results can only be limited to titles in the library.
 - **Where:** `renderSearch` and `makeCard` in `Web/client.js`.
@@ -250,3 +250,8 @@ Checked in AniWorld Downloader's code and in real replies:
   list mode shows each list's first 6 titles as rows, with a **Show all N**
   button for the rest (decided with the user; full lists would make the
   page 120 to 150 rows long).
+- 2026-10-25: The user checked 0.2.3.24 on the server. Also fixed there:
+  the start page's **Show all** button is `raised` like the queue's
+  **Show more**, and list rows are `box-sizing:border-box`, since
+  `listItem-button` is 100% wide and the padding pushed the row's border
+  past the list. Item 3 is done and goes out in 0.2.4.0. Next: item 2.
