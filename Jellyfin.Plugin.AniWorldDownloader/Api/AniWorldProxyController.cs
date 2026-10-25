@@ -92,6 +92,7 @@ public class AniWorldProxyController : ControllerBase
             ["canManageSync"] = caller.IsAdmin && AniWorldClient.HasAdminKey,
             ["defaultLanguage"] = config.DefaultLanguage,
             ["defaultProvider"] = config.DefaultProvider,
+            ["missingSeasons"] = config.MissingSeasons,
         });
     }
 

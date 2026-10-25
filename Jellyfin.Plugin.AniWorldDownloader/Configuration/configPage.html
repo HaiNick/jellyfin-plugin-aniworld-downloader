@@ -79,6 +79,18 @@
                                 scan. A series already in the library gets only its own folder scanned.
                             </div>
                         </div>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="MissingSeasons">Seasons on AniWorld that Jellyfin doesn't have</label>
+                            <select is="emby-select" id="MissingSeasons" name="MissingSeasons" class="emby-select-withcolor emby-select">
+                                <option value="newer">Show newer seasons</option>
+                                <option value="all">Show every missing season</option>
+                                <option value="off">Don't show</option>
+                            </select>
+                            <div class="fieldDescription">
+                                On a series' page in Jellyfin. Newer means above the highest season Jellyfin has, so
+                                older seasons left out on purpose don't show up.
+                            </div>
+                        </div>
                     </div>
 
                     <div class="verticalSection">
@@ -144,6 +156,7 @@
                         field('DefaultLanguage').value = config.DefaultLanguage || 'German Dub';
                         field('DefaultProvider').value = config.DefaultProvider || 'VOE';
                         field('ScanAfterDownload').checked = config.ScanAfterDownload !== false;
+                        field('MissingSeasons').value = config.MissingSeasons || 'newer';
                         r[1].forEach(function (u) { u.Id = normaliseId(u.Id); });
                         renderUsers(r[1], (config.DownloadUserIds || []).map(normaliseId));
                         Dashboard.hideLoadingMsg();
@@ -204,6 +217,7 @@
                         config.DefaultLanguage = field('DefaultLanguage').value;
                         config.DefaultProvider = field('DefaultProvider').value;
                         config.ScanAfterDownload = field('ScanAfterDownload').checked;
+                        config.MissingSeasons = field('MissingSeasons').value;
                         config.DownloadUserIds = Array.prototype.map.call(
                             page.querySelectorAll('.chkDownloadUser:checked'),
                             function (box) { return box.getAttribute('data-id'); });

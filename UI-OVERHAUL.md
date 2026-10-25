@@ -305,3 +305,17 @@ Checked in AniWorld Downloader's code and in real replies:
     Got Reincarnated as a Slime" (Season 4: 13 of 24).
   - Chrome asks before a site's second download, so a second capture needs
     "allow multiple downloads" for the server.
+- 2026-10-25: Seasons Jellyfin doesn't have at all. The series page gets
+  one more line under the season cards (or SleekFin's episode list):
+  "Season 3 is on AniWorld" / "Seasons 1 and 2 are on AniWorld", with a
+  **Download** button that opens the title page at the first of them. It
+  comes from the same `Seasons` reply, so no extra call.
+  - New plugin setting **Seasons on AniWorld that Jellyfin doesn't have**
+    (`MissingSeasons`, sent in `Info`): "newer" (default, only seasons
+    above Jellyfin's highest), "all", or "off". AniWorld can't say whether
+    a season is new or was left out on purpose, so "newer" keeps Classroom
+    of the Elite's seasons 1 and 2 quiet while Euphoria's season 3 shows.
+  - Left out when any season Jellyfin has doesn't line up with AniWorld's.
+  - Tried in the preview (Slime: nothing with "newer", "Seasons 1 and 2"
+    with "all"; the toolbar has a **Seasons** picker for the setting) and,
+    with the branch's client.js loaded by hand, on Euphoria on the server.

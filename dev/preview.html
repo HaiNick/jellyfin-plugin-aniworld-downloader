@@ -118,6 +118,7 @@
         <label><input type="checkbox" class="preview-phone-toggle"> Phone</label>
         <label><input type="checkbox" class="preview-admin-toggle" checked> Admin</label>
         <label><input type="checkbox" class="preview-sleekfin-toggle"> SleekFin</label>
+        <label>Seasons <select class="preview-seasons"><option value="newer">newer</option><option value="all">all</option><option value="off">off</option></select></label>
         <span class="preview-note"></span>
     </div>
 
@@ -392,7 +393,11 @@
 
                 if (method === 'GET' && path === 'Info') {
                     var admin = settings().admin !== false;
-                    return later(Object.assign({}, info, { isAdmin: admin, canDownload: true, canManageSync: admin && Boolean(status) }));
+                    return later(Object.assign({}, info, {
+                        isAdmin: admin, canDownload: true, canManageSync: admin && Boolean(status),
+                        // The plugin setting, picked in the toolbar
+                        missingSeasons: settings().missingSeasons || info.missingSeasons || 'newer'
+                    }));
                 }
 
                 if (method === 'GET' && path === 'AutoSync/Status' && status) {
@@ -723,6 +728,13 @@
             sleekFin.parentNode.hidden = !(fixtures.details && fixtures.details.stylesheets);
             sleekFin.addEventListener('change', function () {
                 save({ sleekfin: sleekFin.checked });
+                window.location.reload();
+            });
+
+            var seasons = document.querySelector('.preview-seasons');
+            seasons.value = settings().missingSeasons || 'newer';
+            seasons.addEventListener('change', function () {
+                save({ missingSeasons: seasons.value });
                 window.location.reload();
             });
 

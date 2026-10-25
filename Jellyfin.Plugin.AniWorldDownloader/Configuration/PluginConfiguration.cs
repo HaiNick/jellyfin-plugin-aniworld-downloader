@@ -48,6 +48,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool ScanAfterDownload { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets which seasons that Jellyfin doesn't have the series page
+    /// points out: "newer" (above Jellyfin's highest season), "all", or "off".
+    /// </summary>
+    public string MissingSeasons { get; set; } = "newer";
+
+    /// <summary>
     /// Gets or sets the secret that signs poster links, so the image proxy
     /// only fetches what the plugin itself handed out. Made on first use.
     /// </summary>
