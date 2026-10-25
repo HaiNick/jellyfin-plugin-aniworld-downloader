@@ -427,7 +427,8 @@
             P + ' .aniworld-filters .aniworld-layout{margin:0 0 .5em}',
             // Start page in list mode: the first few titles, then Show all
             P + ' .aniworld-show-all{margin:.5em 0 0}',
-            P + ' .aniworld-result-row{color:inherit;text-decoration:none}',
+            // listItem-button is 100% wide; on a link the padding would add to that
+            P + ' .aniworld-result-row{color:inherit;text-decoration:none;box-sizing:border-box}',
             // paperList centres itself; the results start at the left like the cards
             P + ' .aniworld-section-items.paperList{max-width:60em;margin-left:0}',
             // Posters are portrait, so the list image is too
