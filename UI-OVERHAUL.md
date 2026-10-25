@@ -244,3 +244,9 @@ Checked in AniWorld Downloader's code and in real replies:
     detailed than a card, only denser. AniWorld and S.to hits still need
     one `Series` lookup each for their poster.
   - Next: check on the server with SleekFin.
+- 2026-10-25: On the server (0.2.3.21) the switch was hard to find: it sat
+  alone at the right end of the filter row, and only after a search. It
+  now sits right after the checkbox and shows on the start page too. There,
+  list mode shows each list's first 6 titles as rows, with a **Show all N**
+  button for the rest (decided with the user; full lists would make the
+  page 120 to 150 rows long).

@@ -424,7 +424,9 @@
             P + ' .aniworld-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 1em;max-width:60em;margin:.75em 0}',
             P + ' .aniworld-filters .selectContainer{flex:1;min-width:8em;max-width:14em;margin:0 0 .5em}',
             P + ' .aniworld-filters .aniworld-filter{margin:0 0 .5em}',
-            P + ' .aniworld-filters .aniworld-layout{margin:0 0 .5em auto}',
+            P + ' .aniworld-filters .aniworld-layout{margin:0 0 .5em}',
+            // Start page in list mode: the first few titles, then Show all
+            P + ' .aniworld-show-all{margin:.5em 0 0}',
             P + ' .aniworld-result-row{color:inherit;text-decoration:none}',
             // paperList centres itself; the results start at the left like the cards
             P + ' .aniworld-section-items.paperList{max-width:60em;margin-left:0}',
@@ -635,7 +637,7 @@
                 selectHtml('Site', 'aniworld-filter-site', '', 'aniworld-filter-select')
                 : '') +
             '<div class="aniworld-filter">' + checkboxHtml('aniworld-only-library', filters.library ? ' checked' : '', 'Only titles in my library') + '</div>' +
-            (keyword ? layoutButtonHtml(layout) : '') +
+            layoutButtonHtml(layout) +
             '</div>' +
             '<div class="aniworld-status"></div>' +
             '<div class="aniworld-results"></div>';
@@ -671,12 +673,31 @@
         }
 
         var results = body.querySelector('.aniworld-results');
+        // Draws the results again in the other layout; set below per view
+        var relayout;
+        body.querySelector('.aniworld-filters').addEventListener('click', function (e) {
+            var button = e.target.closest('.aniworld-layout');
+            if (!button) {
+                return;
+            }
+
+            layout = layout === 'list' ? 'grid' : 'list';
+            saveLayout(layout);
+            button.replaceWith(el(layoutButtonHtml(layout)));
+            relayout();
+        });
+
         if (!keyword) {
             libraryBox.addEventListener('change', function (e) {
                 filters.library = e.target.checked;
                 routeTo(hashValues(), true);
             });
-            renderBrowse(inner, results, params, filters.library);
+            // AniWorld's lists are cached, so drawing them again costs nothing
+            relayout = function () {
+                results.innerHTML = '';
+                renderBrowse(inner, results, params, filters.library, layout);
+            };
+            renderBrowse(inner, results, params, filters.library, layout);
             if (!('ontouchstart' in window)) {
                 input.focus();
             }
@@ -813,19 +834,11 @@
             filters.library = libraryBox.checked;
             filtersChanged();
         });
-        body.querySelector('.aniworld-filters').addEventListener('click', function (e) {
-            var button = e.target.closest('.aniworld-layout');
-            if (!button) {
-                return;
-            }
-
-            layout = layout === 'list' ? 'grid' : 'list';
-            saveLayout(layout);
-            button.replaceWith(el(layoutButtonHtml(layout)));
+        relayout = function () {
             setLayout();
             hits.forEach(draw);
             apply();
-        });
+        };
 
         setLayout();
         fillFilters();
@@ -954,13 +967,17 @@
         }
     }
 
-    function renderBrowse(inner, results, params, onlyLibrary) {
+    // Titles a start page list shows in list mode before Show all
+    var BROWSE_LIST_ROWS = 6;
+
+    function renderBrowse(inner, results, params, onlyLibrary, layout) {
         var view = renderedHash;
         BROWSE_LISTS.forEach(function (list) {
             var section = el(sectionHtml(list.label, '',
-                '<div class="itemsContainer aniworld-row"><div class="aniworld-status">Loading…</div></div>'));
+                '<div class="' + (layout === 'list' ? 'itemsContainer vertical-list paperList aniworld-section-items' : 'itemsContainer aniworld-row') +
+                '"><div class="aniworld-status">Loading…</div></div>'));
             results.appendChild(section);
-            var row = section.querySelector('.aniworld-row');
+            var row = section.querySelector('.itemsContainer');
 
             cached('browse|' + list.id, function () {
                 return api('GET', 'Browse/' + list.id);
@@ -979,15 +996,28 @@
                 }
 
                 row.innerHTML = '';
-                items.forEach(function (item) {
-                    row.appendChild(makeCard({
+                items.forEach(function (item, i) {
+                    var hit = {
                         title: item.title,
                         url: item.url,
                         site: siteFromUrl(item.url),
                         poster_url: item.poster_url,
                         libraryItemId: item.libraryItemId
-                    }, params, true));
+                    };
+                    var node = layout === 'list' ? makeRow(hit, params) : makeCard(hit, params, true);
+                    // Hidden rows load no poster until they are shown
+                    node.hidden = layout === 'list' && i >= BROWSE_LIST_ROWS;
+                    row.appendChild(node);
                 });
+
+                if (layout === 'list' && items.length > BROWSE_LIST_ROWS) {
+                    var all = el('<button type="button" class="emby-button aniworld-show-all">Show all ' + items.length + '</button>');
+                    all.addEventListener('click', function () {
+                        Array.prototype.forEach.call(row.children, function (node) { node.hidden = false; });
+                        all.remove();
+                    });
+                    section.appendChild(all);
+                }
             }, function () {
                 section.remove();
             });
