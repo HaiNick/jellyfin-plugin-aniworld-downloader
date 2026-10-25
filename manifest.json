@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.3.22",
+        "changelog": "Development build of search-filters at 2c104c4. Not a release; it may break.\n\n- put the layout switch next to the checkbox and use it on the start page too\n- filter search results in place and add a grid/list switch",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.3.22/aniworld-downloader_0.2.3.22.zip",
+        "checksum": "7739d31898e78c2bd042b3db8e8f452f",
+        "timestamp": "2026-10-25T16:38:40Z"
+      },
+      {
         "version": "0.2.3.21",
         "changelog": "Development build of search-filters at f11a4b0. Not a release; it may break.\n\n- filter search results in place and add a grid/list switch",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.13/aniworld-downloader_0.2.2.13.zip",
         "checksum": "ba99032589ff417874f1a96b9ef3a838",
         "timestamp": "2026-10-24T13:08:29Z"
-      },
-      {
-        "version": "0.2.2.12",
-        "changelog": "Development build of autosync-page at 71c477b. Not a release; it may break.\n\n- add an Auto-Sync page for admins to see and manage tracked series",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.12/aniworld-downloader_0.2.2.12.zip",
-        "checksum": "8f8cb72f468d11521a8728a105a2e982",
-        "timestamp": "2026-10-24T13:04:33Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
