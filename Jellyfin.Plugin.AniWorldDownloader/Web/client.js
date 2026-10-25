@@ -1011,7 +1011,7 @@
                 });
 
                 if (layout === 'list' && items.length > BROWSE_LIST_ROWS) {
-                    var all = el('<button type="button" class="emby-button aniworld-show-all">Show all ' + items.length + '</button>');
+                    var all = el('<button type="button" class="raised emby-button aniworld-show-all">Show all ' + items.length + '</button>');
                     all.addEventListener('click', function () {
                         Array.prototype.forEach.call(row.children, function (node) { node.hidden = false; });
                         all.remove();
