@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.3.21",
+        "changelog": "Development build of search-filters at f11a4b0. Not a release; it may break.\n\n- filter search results in place and add a grid/list switch",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.3.21/aniworld-downloader_0.2.3.21.zip",
+        "checksum": "42907e62a2ff8dfb85290dd9c19f98ce",
+        "timestamp": "2026-10-25T16:30:11Z"
+      },
+      {
         "version": "0.2.2.20",
         "changelog": "Development build of autosync-page at 37c2c9d. Not a release; it may break.\n\n- retry, move, remove and clear downloads from the queue\n- make the title page and queue compact\n- show speed, time left and errors in the queue, and history in Auto-Sync\n- keep the download bar above a theme's bottom bar\n- lay out the title page like Jellyfin's item page\n- build the plugin page from Jellyfin's own components\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.12/aniworld-downloader_0.2.2.12.zip",
         "checksum": "8f8cb72f468d11521a8728a105a2e982",
         "timestamp": "2026-10-24T13:04:33Z"
-      },
-      {
-        "version": "0.2.2.11",
-        "changelog": "Development build of manga at 466b8e0. Not a release; it may break.\n\n- search and download manga from MangaFire",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.11/aniworld-downloader_0.2.2.11.zip",
-        "checksum": "1906f317c82d0e6c883d8421dcf5aa5f",
-        "timestamp": "2026-10-23T09:15:39Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
