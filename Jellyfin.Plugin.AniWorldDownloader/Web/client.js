@@ -485,6 +485,10 @@
             P + ' .aniworld-errors-list .fieldDescription{margin:.25em 0;overflow-wrap:anywhere}',
             P + ' .aniworld-queue-more{margin:1em 0 0}',
             P + ' .aniworld-history{margin:.5em 0 1em}',
+            // On Jellyfin's season page, under its episode list
+            '.aniworld-missing .paperList{max-width:60em;margin-left:0}',
+            '.aniworld-missing .fieldDescription{margin:.5em 0 0}',
+            '.aniworld-missing .emby-button{margin:1em 0 0}',
 
             '@media (max-width:40em){' +
             P + ' .aniworld-head{grid-template-columns:6em minmax(0,1fr);grid-template-areas:"poster text" "overview overview";gap:0 1em}' +
@@ -1166,6 +1170,14 @@
             return Promise.resolve({});
         }
 
+        return loadLibraryEpisodes(itemId).catch(function () {
+            return {};
+        });
+    }
+
+    // The same, but failing when Jellyfin can't say, for callers that must
+    // not take "nothing" for "nothing in the library"
+    function loadLibraryEpisodes(itemId) {
         return cached('library|' + itemId, function () {
             return jellyfinGet('Shows/' + itemId + '/Episodes', {
                 UserId: window.ApiClient.getCurrentUserId(),
@@ -1185,8 +1197,6 @@
                 });
                 return byNumber;
             });
-        }).catch(function () {
-            return {};
         });
     }
 
@@ -1301,7 +1311,7 @@
                 return;
             }
 
-            new DetailState(inner, url, seasons, info, params.get('missing') === '1').start();
+            new DetailState(inner, url, seasons, info, params.get('missing') === '1', Number(params.get('s'))).start();
         }, function (err) {
             status.textContent = 'Could not load the seasons: ' + err.message;
         });
@@ -2017,13 +2027,16 @@
 
     // tickMissing: opened from Jellyfin's series page, so the episodes not in
     // the library yet start ticked
-    function DetailState(inner, seriesUrl, seasons, info, tickMissing) {
+    // seasonNumber: the season to open at, when a link names one
+    function DetailState(inner, seriesUrl, seasons, info, tickMissing, seasonNumber) {
         this.tickMissing = tickMissing;
         this.inner = inner;
         this.seriesUrl = seriesUrl;
         this.seasons = seasons;
         this.info = info;
-        this.season = seasons[0];
+        this.season = seasons.filter(function (s) {
+            return !s.are_movies && s.season_number === seasonNumber;
+        })[0] || seasons[0];
         this.episodes = [];
         // Jellyfin's copies of the episodes, when the title is in the library
         this.library = getSeries(seriesUrl).then(function (series) {
@@ -2056,6 +2069,7 @@
 
         var seasonSelect = pickers.querySelector('.aniworld-season');
         if (seasonSelect) {
+            seasonSelect.value = String(this.seasons.indexOf(this.season));
             seasonSelect.addEventListener('change', function () {
                 self.season = self.seasons[Number(seasonSelect.value)];
                 self.loadSeason();
@@ -2389,6 +2403,291 @@
     }
 
     // ------------------------------------------------------------------
+    // Missing episodes on Jellyfin's own series and season pages
+    // ------------------------------------------------------------------
+    // FindSource searches every site, so its answer is kept on the device:
+    // a match for a week, "not sure" for a day
+    var SOURCE_KEY = 'aniworld-source-';
+    var SOURCE_DAYS = { match: 7, none: 1 };
+
+    // Missing episodes listed before "and N more"
+    var MISSING_ROWS = 10;
+
+    // Like cached, but a failure is kept too: these run on every redraw of
+    // Jellyfin's page, and a downloader that is down shouldn't be asked each time
+    var memos = {};
+
+    function memo(key, load) {
+        if (!(key in memos)) {
+            memos[key] = load().catch(function () {
+                return null;
+            });
+        }
+
+        return memos[key];
+    }
+
+    // The AniWorld URL of a library series, or null when FindSource isn't sure
+    function findSource(seriesId) {
+        return memo('source|' + seriesId, function () {
+            try {
+                var kept = JSON.parse(window.localStorage.getItem(SOURCE_KEY + seriesId) || 'null');
+                if (kept && Date.now() - kept.at < (kept.url ? SOURCE_DAYS.match : SOURCE_DAYS.none) * 864e5) {
+                    return Promise.resolve(kept.url);
+                }
+            } catch (e) {
+                // Blocked storage: ask the server once per page load
+            }
+
+            return api('GET', 'FindSource?itemId=' + encodeURIComponent(seriesId)).then(function (found) {
+                var url = found.url || null;
+                try {
+                    window.localStorage.setItem(SOURCE_KEY + seriesId, JSON.stringify({ url: url, at: Date.now() }));
+                } catch (e) {
+                    // Not kept; asked again on the next page load
+                }
+
+                return url;
+            });
+        });
+    }
+
+    function jellyfinItem(id) {
+        return memo('item|' + id, function () {
+            return window.ApiClient.getItem(window.ApiClient.getCurrentUserId(), id);
+        });
+    }
+
+    function jellyfinSeasons(seriesId) {
+        return memo('seasons|' + seriesId, function () {
+            return jellyfinGet('Shows/' + seriesId + '/Seasons', { UserId: window.ApiClient.getCurrentUserId() }).then(function (reply) {
+                return reply.Items || [];
+            });
+        });
+    }
+
+    // What AniWorld has of a Jellyfin season and which episode numbers
+    // Jellyfin has, or null when the two can't be lined up: no sure match,
+    // no such season on AniWorld (season 0 there is movies, not specials),
+    // or Jellyfin numbers past AniWorld's last episode (absolute numbering)
+    function seasonOnAniWorld(seriesId, seasonNumber) {
+        if (!seasonNumber) {
+            return Promise.resolve(null);
+        }
+
+        return memo('aniworld-season|' + seriesId + '|' + seasonNumber, function () {
+            return findSource(seriesId).then(function (url) {
+                if (!url) {
+                    return null;
+                }
+
+                return Promise.all([
+                    cached('seasons|' + url, function () {
+                        return api('GET', 'Seasons?url=' + encodeURIComponent(url));
+                    }),
+                    loadLibraryEpisodes(seriesId)
+                ]).then(function (replies) {
+                    var season = (replies[0].seasons || []).filter(function (s) {
+                        return !s.are_movies && s.season_number === seasonNumber;
+                    })[0];
+                    if (!season) {
+                        return null;
+                    }
+
+                    var have = {};
+                    var past = false;
+                    Object.keys(replies[1]).forEach(function (key) {
+                        var parts = key.split(':');
+                        if (Number(parts[0]) === seasonNumber) {
+                            have[parts[1]] = true;
+                            past = past || Number(parts[1]) > season.episode_count;
+                        }
+                    });
+
+                    return past ? null : { url: url, season: season, have: have };
+                });
+            });
+        });
+    }
+
+    // How many episodes of the season AniWorld has that Jellyfin doesn't,
+    // from the counts alone, so a series page costs no episode lookups
+    function missingCount(found) {
+        var count = found.season.episode_count;
+        for (var n = 1; n <= found.season.episode_count; n++) {
+            if (found.have[n]) {
+                count--;
+            }
+        }
+
+        return count;
+    }
+
+    // The season's missing episodes; downloaded ones wait for the library scan
+    function missingEpisodes(seriesId, seasonNumber) {
+        return memo('missing|' + seriesId + '|' + seasonNumber, function () {
+            return seasonOnAniWorld(seriesId, seasonNumber).then(function (found) {
+                if (!found) {
+                    return null;
+                }
+
+                return cached('episodes|' + found.season.url, function () {
+                    return api('GET', 'Episodes?url=' + encodeURIComponent(found.season.url) +
+                        '&seriesUrl=' + encodeURIComponent(found.url));
+                }).then(function (reply) {
+                    var episodes = (reply.episodes || []).filter(function (ep) {
+                        return !ep.downloaded && !found.have[ep.episode_number];
+                    });
+                    return episodes.length ? { url: found.url, season: found.season, episodes: episodes } : null;
+                });
+            });
+        });
+    }
+
+    // padded: SleekFin's own section next to it pads itself, Jellyfin's
+    // containers do that for their children
+    function missingHtml(seasonId, found, info, padded) {
+        var count = found.episodes.length;
+        var rows = found.episodes.slice(0, MISSING_ROWS).map(function (ep) {
+            var name = ep.title_de || ep.title_en || 'Episode ' + ep.episode_number;
+            var languages = (ep.available_languages || []).map(function (lang) {
+                return LANGUAGE_SHORT[lang] || lang;
+            });
+            return '<div class="listItem listItem-border"><div class="listItemBody two-line">' +
+                '<div class="listItemBodyText"><bdi>' + escapeHtml(ep.episode_number + '. ' + name) + '</bdi></div>' +
+                '<div class="listItemBodyText secondary">' + escapeHtml(languages.join(' · ')) + '</div>' +
+                '</div></div>';
+        }).join('');
+
+        return '<div class="verticalSection detailVerticalSection aniworld-missing' + (padded ? ' padded-left padded-right' : '') + '" ' + MARK + ' data-season="' + escapeHtml(seasonId) + '">' +
+            '<h2 class="sectionTitle sectionTitle-cards">Not in your library</h2>' +
+            '<div class="itemsContainer vertical-list paperList">' + rows + '</div>' +
+            (count > MISSING_ROWS ? '<p class="fieldDescription">And ' + (count - MISSING_ROWS) + ' more.</p>' : '') +
+            (info.canDownload
+                ? '<a class="raised button-submit emby-button aniworld-missing-download" href="' +
+                escapeHtml(hashFor({ u: found.url, s: String(found.season.season_number), missing: '1' })) + '">Download ' +
+                plural(count, 'episode') + '</a>'
+                : '') +
+            '</div>';
+    }
+
+    // Jellyfin keeps earlier pages in the DOM; the one on screen counts
+    function visibleDetailPage() {
+        var pages = document.querySelectorAll('.itemDetailPage');
+        for (var i = pages.length - 1; i >= 0; i--) {
+            if (pages[i].offsetParent !== null) {
+                return pages[i];
+            }
+        }
+
+        return null;
+    }
+
+    // The season SleekFin's dropdown shows on a series page
+    function sleekFinSeason(page, seasons) {
+        var select = page.querySelector('.sleekfin-details-episodes select');
+        if (select && select.value) {
+            return seasons.filter(function (s) { return s.Id === select.value; })[0] || null;
+        }
+
+        var trigger = page.querySelector('.sleekfin-details-season-trigger');
+        var label = trigger ? trigger.textContent.trim() : '';
+        return seasons.filter(function (s) {
+            return (s.Name || 'Season ' + s.IndexNumber) === label;
+        })[0] || null;
+    }
+
+    // "3 more on AniWorld" under each season card that has missing episodes
+    function markSeasonCards(page, seriesId) {
+        var cards = page.querySelectorAll('#childrenContent .card[data-type="Season"][data-id]:not([' + MARK + '])');
+        if (!cards.length) {
+            return;
+        }
+
+        Array.prototype.forEach.call(cards, function (card) {
+            card.setAttribute(MARK, '');
+        });
+        jellyfinSeasons(seriesId).then(function (seasons) {
+            Array.prototype.forEach.call(cards, function (card) {
+                var season = (seasons || []).filter(function (s) { return s.Id === card.getAttribute('data-id'); })[0];
+                if (!season) {
+                    return;
+                }
+
+                seasonOnAniWorld(seriesId, season.IndexNumber).then(function (found) {
+                    // Under the name, in the footer or, with SleekFin, the card box
+                    var lines = card.querySelectorAll('.cardText:not(.cardDefaultText)');
+                    var count = found ? missingCount(found) : 0;
+                    if (count > 0 && lines.length && card.isConnected) {
+                        lines[lines.length - 1].after(el('<div class="cardText cardTextCentered cardText-secondary aniworld-card-missing"><bdi>' +
+                            escapeHtml(count + ' more on AniWorld') + '</bdi></div>'));
+                    }
+                });
+            });
+        });
+    }
+
+    // The "Not in your library" section under the episode list on screen
+    function showMissingSection(page, anchor, seriesId, season, info, isShown) {
+        var existing = page.querySelector('.aniworld-missing');
+        if (existing && existing.getAttribute('data-season') === season.Id) {
+            if (existing.previousElementSibling !== anchor) {
+                anchor.after(existing);
+            }
+
+            return;
+        }
+
+        if (existing) {
+            existing.remove();
+        }
+
+        missingEpisodes(seriesId, season.IndexNumber).then(function (found) {
+            if (found && anchor.isConnected && isShown() && !page.querySelector('.aniworld-missing')) {
+                anchor.after(el(missingHtml(season.Id, found, info, anchor.classList.contains('sleekfin-details-episodes'))));
+            }
+        });
+    }
+
+    function addMissingEpisodes() {
+        var id = detailsItemId();
+        var page = id && window.ApiClient ? visibleDetailPage() : null;
+        if (!page) {
+            return;
+        }
+
+        Promise.all([getInfo(), jellyfinItem(id)]).then(function (replies) {
+            var info = replies[0];
+            var item = replies[1];
+            if (!info.configured || !item || detailsItemId() !== id || !page.isConnected) {
+                return;
+            }
+
+            addStyles();
+            var sleekFin = page.querySelector('.sleekfin-details-episodes');
+            if (item.Type === 'Season') {
+                var list = sleekFin || page.querySelector('#listChildrenCollapsible:not(.hide)');
+                if (list) {
+                    showMissingSection(page, list, item.SeriesId, item, info, function () { return detailsItemId() === id; });
+                }
+            } else if (item.Type === 'Series') {
+                markSeasonCards(page, item.Id);
+                if (sleekFin) {
+                    jellyfinSeasons(item.Id).then(function (seasons) {
+                        var season = sleekFinSeason(page, seasons || []);
+                        if (season) {
+                            showMissingSection(page, sleekFin, item.Id, season, info, function () {
+                                var shown = sleekFinSeason(page, seasons);
+                                return shown !== null && shown.Id === season.Id;
+                            });
+                        }
+                    });
+                }
+            }
+        }, function () { /* no plugin page reachable, nothing added */ });
+    }
+
+    // ------------------------------------------------------------------
     // Page
     // ------------------------------------------------------------------
     // The sticky download bar needs a solid background, or the episode list
@@ -2546,6 +2845,7 @@
             addNavEntries();
             renderPage();
             addSeriesButton();
+            addMissingEpisodes();
         });
     }
 

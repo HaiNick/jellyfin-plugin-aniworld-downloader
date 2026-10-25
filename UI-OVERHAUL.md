@@ -255,3 +255,35 @@ Checked in AniWorld Downloader's code and in real replies:
   **Show more**, and list rows are `box-sizing:border-box`, since
   `listItem-button` is 100% wide and the padding pushed the row's border
   past the list. Item 3 is done and goes out in 0.2.4.0. Next: item 2.
+- 2026-10-25: The user put item 2 back and chose items 6 and 5 next, in
+  that order. Item 6 decisions: one **Download N episodes** button under the
+  section instead of one per row, and the section goes after SleekFin's
+  episode list, not into it (SleekFin renders that list with Preact).
+- 2026-10-25: Item 6 works in the preview (`missing-episodes` branch) and,
+  with the branch's client.js loaded by hand, on the server with SleekFin.
+  - Season cards get "N more on AniWorld" from `Seasons`' `episode_count`
+    minus Jellyfin's episodes, so a series page costs no `Episodes` call.
+    SleekFin's season posters have no `.cardFooter`, so the line goes after
+    the card's last `.cardText`.
+  - Season page: a **Not in your library** section under the episode list
+    (stock: after `#listChildrenCollapsible`; SleekFin: after
+    `.sleekfin-details-episodes`, with `padded-left padded-right`). At most
+    10 rows, then "And N more.", then a button that opens the title page
+    with `s=<season>&missing=1`. The title page now opens at the season
+    `s` names.
+  - SleekFin has three layouts: its "season posters" setting (on on the
+    user's server) shows season cards on the series page; with it off, the
+    series page shows its episode list with a season dropdown, read from the
+    dropdown's `select` or its trigger's label. The season page always shows
+    its episode list. The dropdown case isn't tried on the server yet.
+  - `FindSource` is kept in `localStorage` per series (a match 7 days, no
+    match 1 day). Everything else is kept for the page load, failures too,
+    so a downloader that is down isn't asked on every redraw.
+  - Can't do: seasons Jellyfin doesn't have at all (Classroom of the Elite
+    has seasons 3 and 4 of AniWorld's 4) get no card, so nothing points to
+    them. The first `Episodes` call for a season takes AniWorld 10 to 15 s.
+  - The preview has stock **Series page** and **Season page** views built
+    from a library title in the fixtures, with its last episode taken out
+    of Jellyfin's list. `capture.js` saves `Shows/{id}/Seasons` and
+    `FindSource` for library titles.
+  - Next: a dev build, and the user's check, also with season posters off.

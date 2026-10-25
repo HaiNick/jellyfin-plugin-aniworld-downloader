@@ -67,6 +67,18 @@
             if (shows) {
                 replies['GET Shows/' + series.libraryItemId + '/Episodes'] = shows;
             }
+
+            // For the missing episodes on the preview's series and season page
+            var seasonsOfShow = await ApiClient.ajax({
+                type: 'GET',
+                url: ApiClient.getUrl('Shows/' + series.libraryItemId + '/Seasons', { UserId: ApiClient.getCurrentUserId() }),
+                dataType: 'json'
+            }).catch(function () { return null; });
+            if (seasonsOfShow) {
+                replies['GET Shows/' + series.libraryItemId + '/Seasons'] = seasonsOfShow;
+            }
+
+            await keep('FindSource?itemId=' + series.libraryItemId);
         }
 
         await keep('AutoSync/Tracked?url=' + url);

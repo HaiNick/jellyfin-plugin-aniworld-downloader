@@ -74,6 +74,9 @@
         </div>
         <div class="skinBody">
             <div id="searchPage" class="page libraryPage allLibraryPage noSecondaryNavPage"></div>
+            <!-- Jellyfin's series and season page as stock jellyfin-web draws
+                 them, without SleekFin, for the missing episodes -->
+            <div id="itemDetailPage" class="page libraryPage itemDetailPage noSecondaryNavPage selfBackdropPage hide"></div>
         </div>
     </div>
 
@@ -83,6 +86,8 @@
         <button data-route="&u=">Detail</button>
         <button data-route="&view=queue">Queue</button>
         <button data-route="&view=autosync">Auto-Sync</button>
+        <button data-details="series">Series page</button>
+        <button data-details="season">Season page</button>
         <label><input type="checkbox" class="preview-phone-toggle"> Phone</label>
         <label><input type="checkbox" class="preview-admin-toggle" checked> Admin</label>
         <span class="preview-note"></span>
@@ -298,11 +303,58 @@
                 return later({ ok: true, started: true });
             }
 
+            // A title from the fixtures that is in the library stands in for
+            // Jellyfin's series page. Its last episode is left out of Jellyfin's
+            // list and marked not downloaded, so there is something missing.
+            var librarySeries = Object.keys(replies).filter(function (key) {
+                return /^GET Series\?/.test(key) && replies[key].libraryItemId &&
+                    replies['GET Shows/' + replies[key].libraryItemId + '/Episodes'];
+            }).map(function (key) {
+                return { url: decodeURIComponent(key.slice('GET Series?url='.length)), item: replies[key] };
+            })[0] || null;
+            var jellyfinItems = {};
+            if (librarySeries) {
+                var seriesId = librarySeries.item.libraryItemId;
+                var showsKey = 'GET Shows/' + seriesId + '/Episodes';
+                var gap = replies[showsKey].Items.filter(function (ep) { return ep.ParentIndexNumber === 1; }).pop();
+                if (gap) {
+                    replies[showsKey].Items = replies[showsKey].Items.filter(function (ep) { return ep !== gap; });
+                    Object.keys(replies).forEach(function (key) {
+                        if (/^GET Episodes\?/.test(key) && key.indexOf(encodeURIComponent(librarySeries.url + '/staffel-1')) >= 0) {
+                            replies[key].episodes.forEach(function (ep) {
+                                if (ep.episode_number === gap.IndexNumber) {
+                                    ep.downloaded = false;
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // Jellyfin's own season 1 when the fixtures have it, a made-up one otherwise
+                var seasonsKey = 'GET Shows/' + seriesId + '/Seasons';
+                var seasonOne = replies[seasonsKey] && replies[seasonsKey].Items.filter(function (s) { return s.IndexNumber === 1; })[0];
+                var seasonId = seasonOne ? seasonOne.Id : 'preview-season-1';
+                jellyfinItems[seriesId] = { Id: seriesId, Type: 'Series', Name: librarySeries.item.title };
+                jellyfinItems[seasonId] = { Id: seasonId, Type: 'Season', SeriesId: seriesId, IndexNumber: 1, Name: 'Season 1' };
+                if (!seasonOne) {
+                    replies[seasonsKey] = { Items: [jellyfinItems[seasonId]] };
+                }
+
+                // For the toolbar's Series page and Season page buttons
+                window.previewDetails = { series: seriesId, season: seasonId };
+            }
+
             // What the plugin's controller would answer, from the fixtures
             // plus whatever was changed on this page
             function answer(method, path, body) {
                 var key = method + ' ' + path;
                 var match;
+                if (method === 'GET' && (match = /^FindSource\?itemId=(.*)$/.exec(path)) && !replies[key]) {
+                    return librarySeries && decodeURIComponent(match[1]) === librarySeries.item.libraryItemId
+                        ? later({ url: librarySeries.url, title: librarySeries.item.title, site: 'aniworld' })
+                        : later({ query: 'Unknown' });
+                }
+
                 if (method === 'GET' && path === 'Info') {
                     var admin = settings().admin !== false;
                     return later(Object.assign({}, info, { isAdmin: admin, canDownload: true, canManageSync: admin && Boolean(status) }));
@@ -400,7 +452,7 @@
 
                 // Jellyfin's own calls are kept without their query, which
                 // carries the user ID
-                if (method === 'GET' && (match = /^(Shows\/[^/]+\/Episodes)\?/.exec(path))) {
+                if (method === 'GET' && (match = /^(Shows\/[^/]+\/(?:Episodes|Seasons))\?/.exec(path))) {
                     return replies['GET ' + match[1]] ? later(replies['GET ' + match[1]]) : fail(404, 'Not in the fixtures: ' + key);
                 }
 
@@ -425,7 +477,9 @@
                         : options.url.indexOf(fixtures.server + '/') === 0 ? options.url.slice(fixtures.server.length + 1) : options.url;
                     return answer(options.type || 'GET', path, options.data ? JSON.parse(options.data) : null);
                 },
-                getItem: function () { return Promise.reject(new Error('Not in the preview')); }
+                getItem: function (userId, id) {
+                    return jellyfinItems[id] ? later(jellyfinItems[id]) : Promise.reject(new Error('Not in the preview'));
+                }
             };
 
             // SearchStream: the fixture search, one site per line, like the real stream
@@ -492,9 +546,53 @@
                 setUpTools(target);
             }
 
-            if (window.location.hash.indexOf('#/search?aniworld') !== 0) {
+            if (window.location.hash.indexOf('#/search?aniworld') !== 0 && window.location.hash.indexOf('#/details?') !== 0) {
                 window.location.hash = '#/search?aniworld';
             }
+
+            // Jellyfin's details page for the stand-in series and its season,
+            // in the markup of jellyfin-web's itemDetails.html
+            function drawDetails() {
+                var page = document.getElementById('itemDetailPage');
+                var id = /^#\/details\?id=(.*)$/.exec(window.location.hash);
+                var item = id && jellyfinItems[decodeURIComponent(id[1])];
+                page.classList.toggle('hide', !item);
+                document.getElementById('searchPage').classList.toggle('hide', Boolean(item));
+                if (!item) {
+                    page.innerHTML = '';
+                    return;
+                }
+
+                var children;
+                if (item.Type === 'Series') {
+                    var season = jellyfinItems[window.previewDetails.season];
+                    children = '<div class="itemsContainer vertical-wrap padded-right">' +
+                        '<div class="card overflowPortraitCard card-hoverable" data-type="Season" data-id="' + season.Id + '">' +
+                        '<div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder cardPadder-overflowPortrait"></div>' +
+                        '<a class="cardImageContainer coveredImage cardContent defaultCardBackground defaultCardBackground2" href="#/details?id=' + season.Id + '"></a></div>' +
+                        '<div class="cardFooter"><div class="cardText cardTextCentered cardText-first"><bdi>' + season.Name + '</bdi></div></div></div></div></div>';
+                } else {
+                    var episodes = replies['GET Shows/' + item.SeriesId + '/Episodes'].Items.filter(function (ep) {
+                        return ep.ParentIndexNumber === item.IndexNumber;
+                    });
+                    children = '<div class="itemsContainer vertical-list padded-right">' + episodes.map(function (ep) {
+                        return '<div class="listItem listItem-largeImage listItem-withContentWrapper" data-type="Episode" data-id="' + ep.Id + '">' +
+                            '<div class="listItem-content"><div class="listItemBody"><h3 class="listItemBodyText">' + ep.IndexNumber + '. ' + ep.Name + '</h3>' +
+                            '</div></div></div>';
+                    }).join('') + '</div>';
+                }
+
+                page.innerHTML = '<div class="detailPageWrapperContainer"><div class="detailPagePrimaryContainer padded-left padded-right">' +
+                    '<div class="nameContainer"><h1 class="itemName infoText">' + item.Name + '</h1></div></div>' +
+                    '<div class="detailPagePrimaryContent padded-left padded-right"><div class="detailSection">' +
+                    '<div id="listChildrenCollapsible" class="verticalSection detailVerticalSection">' +
+                    '<h2 class="sectionTitle sectionTitle-cards">' + (item.Type === 'Series' ? 'Seasons' : 'Episodes') + '</h2>' +
+                    '<div id="childrenContent">' + children + '</div></div></div></div>' +
+                    '<div class="detailPageSecondaryContainer padded-left padded-bottom-page"></div></div>';
+            }
+
+            window.addEventListener('hashchange', drawDetails);
+            drawDetails();
 
             if (target === window) {
                 var script = document.createElement('script');
@@ -526,6 +624,14 @@
                 button.addEventListener('click', function () {
                     var extra = button.getAttribute('data-route');
                     target.location.hash = '#/search?aniworld' + (extra === '&u=' ? '&u=' + encodeURIComponent(detailUrl) : extra);
+                });
+            });
+
+            var details = window.previewDetails;
+            document.querySelectorAll('[data-details]').forEach(function (button) {
+                button.hidden = !details;
+                button.addEventListener('click', function () {
+                    target.location.hash = '#/details?id=' + details[button.getAttribute('data-details')];
                 });
             });
 
