@@ -228,3 +228,19 @@ Checked in AniWorld Downloader's code and in real replies:
 - 2026-10-24: The user checked 0.2.2.20 on the server: the compact title
   page, the queue and the queue actions look good. Items 1 (compact
   version) and 4 are done.
+- 2026-10-25: Item 3 works in the preview (`search-filters` branch),
+  desktop and phone.
+  - Type and Site (`emby-select`) list only what the results have, and grow
+    while sites are still answering. They and "Only titles in my library"
+    hide cards in place, so a running search isn't restarted. They're kept
+    in the hash (`ft`, `fs`, `lib`) with `replaceState`, so going back from
+    a title brings them back.
+  - The grid/list switch is one icon button at the end of the filter row,
+    kept in `localStorage` (`aniworld-search-layout`, grid when storage is
+    blocked). List rows are `listItem`s with a 4em portrait poster, the
+    title, and "Site · In your library". Search results only; the start
+    page keeps its rows.
+  - Hits have no year, genre or language, so the list row isn't more
+    detailed than a card, only denser. AniWorld and S.to hits still need
+    one `Series` lookup each for their poster.
+  - Next: check on the server with SleekFin.

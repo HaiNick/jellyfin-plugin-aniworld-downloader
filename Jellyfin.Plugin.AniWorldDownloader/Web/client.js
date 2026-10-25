@@ -420,6 +420,16 @@
             P + ' .aniworld-search .inputContainer{flex:1;margin:0}',
             P + ' .aniworld-search .emby-button{margin:0 0 0 .5em;flex:none}',
             P + ' .aniworld-filter{margin:.75em 0}',
+            // Search filters in one row that wraps on phones; the layout switch at its end
+            P + ' .aniworld-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 1em;max-width:60em;margin:.75em 0}',
+            P + ' .aniworld-filters .selectContainer{flex:1;min-width:8em;max-width:14em;margin:0 0 .5em}',
+            P + ' .aniworld-filters .aniworld-filter{margin:0 0 .5em}',
+            P + ' .aniworld-filters .aniworld-layout{margin:0 0 .5em auto}',
+            P + ' .aniworld-result-row{color:inherit;text-decoration:none}',
+            // paperList centres itself; the results start at the left like the cards
+            P + ' .aniworld-section-items.paperList{max-width:60em;margin-left:0}',
+            // Posters are portrait, so the list image is too
+            P + ' .aniworld-result-row .listItemImage{width:2.7em}',
             P + ' .aniworld-status{margin:1em 0}',
             P + ' .aniworld-status:empty{display:none}',
             // Rows that scroll sideways, like the ones on Jellyfin's home page
@@ -564,12 +574,48 @@
     // ------------------------------------------------------------------
     // Search view
     // ------------------------------------------------------------------
+    // The value of the Type filter for a hit; types without a section count as Other
+    function resultType(item) {
+        return item.type && RESULT_SECTIONS.some(function (s) { return s.type === item.type; }) ? item.type : 'other';
+    }
+
+    // Grid of cards or list of rows, kept per browser
+    var LAYOUT_KEY = 'aniworld-search-layout';
+
+    function readLayout() {
+        try {
+            return window.localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'grid';
+        } catch (e) {
+            return 'grid';
+        }
+    }
+
+    function saveLayout(layout) {
+        try {
+            window.localStorage.setItem(LAYOUT_KEY, layout);
+        } catch (e) {
+            // Private window or blocked storage: the switch still works until reload
+        }
+    }
+
+    function layoutButtonHtml(layout) {
+        return layout === 'list'
+            ? iconButton('aniworld-layout', 'view_module', 'Show as grid')
+            : iconButton('aniworld-layout', 'view_list', 'Show as list');
+    }
+
     function renderSearch(inner, params, info) {
         var keyword = params.get('q') || '';
         // Older links still carry a type; the server search honours it
         var type = params.get('t') || 'all';
-        // Only titles already in a Jellyfin library, see LibraryMatcher
-        var onlyLibrary = params.get('lib') === '1';
+        // Applied in the page, so changing them doesn't search again
+        var filters = {
+            type: params.get('ft') || '',
+            site: params.get('fs') || '',
+            // Only titles already in a Jellyfin library, see LibraryMatcher
+            library: params.get('lib') === '1'
+        };
+        var layout = readLayout();
 
         var body = renderShell(inner, info, 'search');
         // The search box of Jellyfin's own search page
@@ -583,25 +629,39 @@
             '</div>' +
             '<button type="submit" class="raised button-submit emby-button">Search</button>' +
             '</div></form>' +
-            '<div class="aniworld-filter">' + checkboxHtml('aniworld-only-library', onlyLibrary ? ' checked' : '', 'Only titles in my library') + '</div>' +
+            '<div class="aniworld-filters">' +
+            (keyword
+                ? selectHtml('Type', 'aniworld-filter-type', '', 'aniworld-filter-select') +
+                selectHtml('Site', 'aniworld-filter-site', '', 'aniworld-filter-select')
+                : '') +
+            '<div class="aniworld-filter">' + checkboxHtml('aniworld-only-library', filters.library ? ' checked' : '', 'Only titles in my library') + '</div>' +
+            (keyword ? layoutButtonHtml(layout) : '') +
+            '</div>' +
             '<div class="aniworld-status"></div>' +
             '<div class="aniworld-results"></div>';
 
         var form = body.querySelector('form');
         var input = form.querySelector('input');
+
+        function hashValues() {
+            return {
+                q: input.value.trim() || keyword,
+                t: type === 'all' ? '' : type,
+                lib: filters.library ? '1' : '',
+                ft: filters.type,
+                fs: filters.site
+            };
+        }
+
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             input.blur();
-            var value = input.value.trim();
-            if (value) {
-                routeTo({ q: value, t: type === 'all' ? '' : type, lib: onlyLibrary ? '1' : '' });
+            if (input.value.trim()) {
+                routeTo(hashValues());
             }
         });
 
-        body.querySelector('.aniworld-only-library').addEventListener('change', function (e) {
-            routeTo({ q: input.value.trim() || keyword, t: type === 'all' ? '' : type, lib: e.target.checked ? '1' : '' }, true);
-        });
-
+        var libraryBox = body.querySelector('.aniworld-only-library');
         var status = body.querySelector('.aniworld-status');
         if (!info.configured) {
             status.textContent = info.isAdmin
@@ -612,7 +672,11 @@
 
         var results = body.querySelector('.aniworld-results');
         if (!keyword) {
-            renderBrowse(inner, results, params, onlyLibrary);
+            libraryBox.addEventListener('change', function (e) {
+                filters.library = e.target.checked;
+                routeTo(hashValues(), true);
+            });
+            renderBrowse(inner, results, params, filters.library);
             if (!('ontouchstart' in window)) {
                 input.focus();
             }
@@ -620,58 +684,165 @@
         }
 
         var view = renderedHash;
-        var total = 0;
-        var shown = 0;
+        var typeSelect = body.querySelector('.aniworld-filter-type');
+        var siteSelect = body.querySelector('.aniworld-filter-site');
+        var pending = null;
+        var finished = false;
+
+        // Every hit with the card or row it is drawn as, in the order they came
+        var hits = [];
 
         // One section per type, made up front so they keep their order
         var sections = {};
         results.innerHTML = RESULT_SECTIONS.map(function (s) {
-            return sectionHtml(s.label, 'aniworld-section-' + (s.type || 'other'), '<div class="itemsContainer vertical-wrap"></div>');
+            return sectionHtml(s.label, 'aniworld-section-' + (s.type || 'other'), '<div class="aniworld-section-items"></div>');
         }).join('');
         RESULT_SECTIONS.forEach(function (s) {
             var section = results.querySelector('.aniworld-section-' + (s.type || 'other'));
             section.hidden = true;
-            sections[s.type] = section;
+            sections[s.type || 'other'] = section;
         });
 
-        function show(found, pending) {
-            total += found.length;
-            found.forEach(function (item) {
-                if (onlyLibrary && !item.libraryItemId) {
-                    return;
-                }
+        function setLayout() {
+            Object.keys(sections).forEach(function (key) {
+                sections[key].querySelector('.aniworld-section-items').className = 'aniworld-section-items ' +
+                    (layout === 'list' ? 'itemsContainer vertical-list paperList' : 'itemsContainer vertical-wrap');
+            });
+        }
 
-                shown++;
-                var section = sections[item.type] || sections[''];
-                section.hidden = false;
-                section.querySelector('.itemsContainer').appendChild(makeCard(item, params, false));
+        function draw(hit) {
+            var node = layout === 'list' ? makeRow(hit.item, params) : makeCard(hit.item, params, false);
+            if (hit.node) {
+                hit.node.replaceWith(node);
+            } else {
+                sections[hit.type].querySelector('.aniworld-section-items').appendChild(node);
+            }
+
+            hit.node = node;
+        }
+
+        // The options name only what the results have, plus the chosen one
+        // while its site hasn't answered yet
+        function fillSelect(select, values, labels, chosen, allLabel) {
+            var present = values.filter(function (value) {
+                return value === chosen || hits.some(function (hit) { return hit.type === value || hit.site === value; });
+            });
+            select.innerHTML = '<option value="">' + escapeHtml(allLabel) + '</option>' +
+                optionsHtml(present, present.map(function (value) { return labels[value] || value; }));
+            select.value = chosen;
+        }
+
+        function fillFilters() {
+            var typeLabels = {};
+            RESULT_SECTIONS.forEach(function (s) { typeLabels[s.type || 'other'] = s.label; });
+            fillSelect(typeSelect, Object.keys(typeLabels), typeLabels, filters.type, 'All types');
+
+            var sites = [];
+            hits.concat(filters.site ? [{ site: filters.site }] : []).forEach(function (hit) {
+                if (hit.site && sites.indexOf(hit.site) < 0) {
+                    sites.push(hit.site);
+                }
+            });
+            sites.sort(function (a, b) { return siteName(a).localeCompare(siteName(b)); });
+            var siteLabels = {};
+            sites.forEach(function (site) { siteLabels[site] = siteName(site); });
+            fillSelect(siteSelect, sites, siteLabels, filters.site, 'All sites');
+        }
+
+        function apply() {
+            var shown = 0;
+            var visible = {};
+            hits.forEach(function (hit) {
+                var show = (!filters.type || hit.type === filters.type) &&
+                    (!filters.site || hit.site === filters.site) &&
+                    (!filters.library || Boolean(hit.item.libraryItemId));
+                hit.node.hidden = !show;
+                if (show) {
+                    shown++;
+                    visible[hit.type] = true;
+                }
+            });
+            Object.keys(sections).forEach(function (key) {
+                sections[key].hidden = !visible[key];
             });
 
             var text;
             if (pending && pending.length) {
                 text = 'Still searching ' + pending.map(siteName).join(', ') + '…';
-            } else if (!total) {
+            } else if (!finished) {
+                text = 'Searching…';
+            } else if (!hits.length) {
                 text = 'Nothing found for “' + keyword + '”.';
-            } else if (onlyLibrary && !shown) {
-                text = 'None of the ' + total + ' results for “' + keyword + '” are in your library.';
+            } else if (!shown) {
+                text = filters.library && !filters.type && !filters.site
+                    ? 'None of the ' + hits.length + ' results for “' + keyword + '” are in your library.'
+                    : 'None of the ' + hits.length + ' results for “' + keyword + '” match these filters.';
             } else {
                 text = '';
             }
             status.textContent = text;
         }
 
+        function add(found) {
+            found.forEach(function (item) {
+                var hit = { item: item, type: resultType(item), site: item.site || '' };
+                hits.push(hit);
+                draw(hit);
+            });
+            fillFilters();
+            apply();
+        }
+
+        // Keeps the filters in the address, so going back from a title brings
+        // them back, without drawing the page again
+        function filtersChanged() {
+            window.history.replaceState(window.history.state, '', hashFor(hashValues()));
+            view = renderedHash = window.location.hash;
+            apply();
+        }
+
+        typeSelect.addEventListener('change', function () {
+            filters.type = typeSelect.value;
+            filtersChanged();
+        });
+        siteSelect.addEventListener('change', function () {
+            filters.site = siteSelect.value;
+            filtersChanged();
+        });
+        libraryBox.addEventListener('change', function () {
+            filters.library = libraryBox.checked;
+            filtersChanged();
+        });
+        body.querySelector('.aniworld-filters').addEventListener('click', function (e) {
+            var button = e.target.closest('.aniworld-layout');
+            if (!button) {
+                return;
+            }
+
+            layout = layout === 'list' ? 'grid' : 'list';
+            saveLayout(layout);
+            button.replaceWith(el(layoutButtonHtml(layout)));
+            setLayout();
+            hits.forEach(draw);
+            apply();
+        });
+
+        setLayout();
+        fillFilters();
+
         var key = 'search|' + type + '|' + keyword.toLowerCase();
         if (cache[key]) {
             // Back from a title: the finished search, at once
             cache[key].then(function (found) {
                 if (!isStale(view, inner)) {
-                    show(found, null);
+                    finished = true;
+                    add(found);
                 }
             });
             return;
         }
 
-        status.textContent = 'Searching…';
+        apply();
         var collected = [];
         searchStream(keyword, type, function (event) {
             if (isStale(view, inner)) {
@@ -679,12 +850,15 @@
             }
 
             collected = collected.concat(event.results || []);
-            show(event.results || [], event.pending);
+            pending = event.pending;
+            add(event.results || []);
             return true;
         }).then(function () {
             cache[key] = Promise.resolve(collected);
             if (!isStale(view, inner)) {
-                show([], null);
+                pending = null;
+                finished = true;
+                apply();
             }
         }, function (err) {
             if (!isStale(view, inner)) {
@@ -839,6 +1013,28 @@
         }
 
         return card;
+    }
+
+    // The list form of a card: a small poster, the title and where it is from
+    function makeRow(item, params) {
+        var title = item.title || '';
+        var row = el('<a class="listItem listItem-button listItem-border aniworld-result-row" href="' +
+            escapeHtml(hashFor({ q: params.get('q'), t: params.get('t'), lib: params.get('lib'), u: item.url })) + '">' +
+            '<div class="listItemImage cardImageContainer aniworld-list-poster ' + defaultBackground(title) + '"></div>' +
+            '<div class="listItemBody two-line">' +
+            '<div class="listItemBodyText"><bdi>' + escapeHtml(title) + '</bdi></div>' +
+            '<div class="listItemBodyText secondary">' +
+            escapeHtml([siteName(item.site || ''), item.libraryItemId ? 'In your library' : ''].filter(Boolean).join(' · ')) +
+            '</div></div></a>');
+
+        var image = row.querySelector('.listItemImage');
+        if (item.poster_url) {
+            lazyImage(image, imageUrl(item.poster_url));
+        } else {
+            watchPoster(image, item.url);
+        }
+
+        return row;
     }
 
     // Swaps the default colour for the image once it has loaded
