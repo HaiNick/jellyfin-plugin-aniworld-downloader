@@ -15,11 +15,35 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>AniWorld preview</title>
-    <script src="fixtures.js"></script>
+    <!-- Never a cached copy, or a new capture doesn't show up -->
+    <script>document.write('<script src="fixtures.js?' + Date.now() + '"><\/script>');</script>
     <script>
         (function () {
             var fixtures = window.ANIWORLD_FIXTURES;
             if (!fixtures) {
+                return;
+            }
+
+            // With the SleekFin switch on: the stylesheets, inline styles and
+            // page classes capture.js saved from the server, SleekFin's among them
+            var details = fixtures.details;
+            // In phone mode this window only holds the frame, so it stays stock
+            var sleekFin = false;
+            try {
+                var chosen = JSON.parse(window.localStorage.getItem('aniworldPreview') || '{}');
+                sleekFin = Boolean(chosen.sleekfin) && Boolean(details && details.stylesheets) &&
+                    !(chosen.phone && window.self === window.top);
+            } catch (e) { /* stock look */ }
+
+            window.previewSleekFin = sleekFin;
+            if (sleekFin) {
+                details.stylesheets.forEach(function (href) {
+                    document.write('<link rel="stylesheet" href="' + href + '">');
+                });
+                details.styles.forEach(function (css) {
+                    document.write('<style>' + css.replace(/<\/style/gi, '<\\/style') + '</style>');
+                });
+                document.documentElement.className += ' ' + details.htmlClass;
                 return;
             }
 
@@ -61,11 +85,14 @@
         .preview-tools button, .preview-tools label { background: #333; color: #fff; border: 0; border-radius: .3em; padding: .45em .7em;
             font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: .3em; }
         .preview-tools .preview-note { width: 100%; opacity: .7; }
+        .preview-tools [hidden] { display: none; }
         .preview-missing { font: 16px sans-serif; padding: 2em; max-width: 40em; line-height: 1.5; }
     </style>
 </head>
 <!-- jellyfin-web sets dir on body too; its item page CSS needs it there -->
 <body class="libraryDocument" dir="ltr">
+    <div class="backdropContainer"></div>
+    <div class="backgroundContainer"></div>
     <div class="preview-frame">
         <!-- client.js clones the Favorites link into its own nav entry -->
         <div class="preview-header">
@@ -74,9 +101,9 @@
         </div>
         <div class="skinBody">
             <div id="searchPage" class="page libraryPage allLibraryPage noSecondaryNavPage"></div>
-            <!-- Jellyfin's series and season page as stock jellyfin-web draws
-                 them, without SleekFin, for the missing episodes -->
-            <div id="itemDetailPage" class="page libraryPage itemDetailPage noSecondaryNavPage selfBackdropPage hide"></div>
+            <!-- Jellyfin's series and season page: the pages capture.js saved
+                 with the SleekFin switch on, stock jellyfin-web markup without -->
+            <div class="preview-details"></div>
         </div>
     </div>
 
@@ -90,6 +117,7 @@
         <button data-details="season">Season page</button>
         <label><input type="checkbox" class="preview-phone-toggle"> Phone</label>
         <label><input type="checkbox" class="preview-admin-toggle" checked> Admin</label>
+        <label><input type="checkbox" class="preview-sleekfin-toggle"> SleekFin</label>
         <span class="preview-note"></span>
     </div>
 
@@ -303,16 +331,23 @@
                 return later({ ok: true, started: true });
             }
 
-            // A title from the fixtures that is in the library stands in for
-            // Jellyfin's series page. Its last episode is left out of Jellyfin's
-            // list and marked not downloaded, so there is something missing.
-            var librarySeries = Object.keys(replies).filter(function (key) {
+            // The series capture.js saved pages of, as it is. Without one, a
+            // title from the fixtures that is in the library stands in for it,
+            // with its last episode left out of Jellyfin's list and marked not
+            // downloaded, so there is something missing.
+            var details = fixtures.details;
+            var jellyfinItems = {};
+            if (details) {
+                jellyfinItems = details.items;
+                window.previewDetails = { series: details.series, season: details.season };
+            }
+
+            var librarySeries = details ? null : Object.keys(replies).filter(function (key) {
                 return /^GET Series\?/.test(key) && replies[key].libraryItemId &&
                     replies['GET Shows/' + replies[key].libraryItemId + '/Episodes'];
             }).map(function (key) {
                 return { url: decodeURIComponent(key.slice('GET Series?url='.length)), item: replies[key] };
             })[0] || null;
-            var jellyfinItems = {};
             if (librarySeries) {
                 var seriesId = librarySeries.item.libraryItemId;
                 var showsKey = 'GET Shows/' + seriesId + '/Episodes';
@@ -525,7 +560,11 @@
             var framed = window.self !== window.top;
             if (framed) {
                 // What jellyfin-web sets on phones and in the Android app
-                document.documentElement.className = 'layout-mobile';
+                document.documentElement.className = 'layout-mobile' + (window.previewSleekFin ? ' ' + details.htmlClass : '');
+            }
+
+            if (window.previewSleekFin) {
+                document.body.className = details.bodyClass;
             }
 
             var tools = document.querySelector('.preview-tools');
@@ -534,6 +573,10 @@
                 tools.remove();
             } else if (settings().phone) {
                 document.querySelector('.preview-frame').remove();
+                // Jellyfin's fixed backdrop layers would cover the frame
+                document.querySelectorAll('.backdropContainer, .backgroundContainer').forEach(function (node) {
+                    node.remove();
+                });
                 var frame = document.createElement('iframe');
                 // Never a cached copy, or the frame lags behind edits to this file
                 frame.src = 'preview.html?' + Date.now() + window.location.hash;
@@ -550,16 +593,48 @@
                 window.location.hash = '#/search?aniworld';
             }
 
-            // Jellyfin's details page for the stand-in series and its season,
-            // in the markup of jellyfin-web's itemDetails.html
+            // Jellyfin's details page for the series and its season: the saved
+            // page with SleekFin, or the markup of jellyfin-web's itemDetails.html
             function drawDetails() {
-                var page = document.getElementById('itemDetailPage');
-                var id = /^#\/details\?id=(.*)$/.exec(window.location.hash);
+                var holder = document.querySelector('.preview-details');
+                var backdrop = document.querySelector('.backdropContainer');
+                // In phone mode this window only holds the frame
+                if (!holder) {
+                    return;
+                }
+
+                var id = /^#\/details\?id=([^&]*)/.exec(window.location.hash);
                 var item = id && jellyfinItems[decodeURIComponent(id[1])];
-                page.classList.toggle('hide', !item);
+                var saved = item && window.previewSleekFin && details.pages[item.Id];
                 document.getElementById('searchPage').classList.toggle('hide', Boolean(item));
+                document.querySelector('.backgroundContainer').classList.toggle('withBackdrop', Boolean(saved));
+                backdrop.innerHTML = saved ? saved.backdrop : '';
+                // The theme's classes as they were on that page
+                if (window.previewSleekFin) {
+                    var layout = document.documentElement.className.split(' ').filter(function (name) { return /^layout-/.test(name); });
+                    document.documentElement.className = layout.concat((saved || details).htmlClass || '').join(' ');
+                }
+
                 if (!item) {
-                    page.innerHTML = '';
+                    holder.innerHTML = '';
+                    return;
+                }
+
+                if (saved) {
+                    holder.innerHTML = saved.html;
+                    // Jellyfin's lazy loader isn't here: show the images below the fold at once
+                    holder.querySelectorAll('[data-src]').forEach(function (node) {
+                        if (node.tagName === 'IMG') {
+                            node.src = node.getAttribute('data-src');
+                        } else {
+                            node.style.backgroundImage = 'url("' + node.getAttribute('data-src') + '")';
+                        }
+
+                        node.classList.remove('lazy-hidden');
+                    });
+                    holder.querySelectorAll('.lazy-hidden-children').forEach(function (node) {
+                        node.classList.remove('lazy-hidden-children');
+                    });
                     return;
                 }
 
@@ -582,13 +657,14 @@
                     }).join('') + '</div>';
                 }
 
-                page.innerHTML = '<div class="detailPageWrapperContainer"><div class="detailPagePrimaryContainer padded-left padded-right">' +
+                holder.innerHTML = '<div id="itemDetailPage" class="page libraryPage itemDetailPage noSecondaryNavPage selfBackdropPage">' +
+                    '<div class="detailPageWrapperContainer"><div class="detailPagePrimaryContainer padded-left padded-right">' +
                     '<div class="nameContainer"><h1 class="itemName infoText">' + item.Name + '</h1></div></div>' +
                     '<div class="detailPagePrimaryContent padded-left padded-right"><div class="detailSection">' +
                     '<div id="listChildrenCollapsible" class="verticalSection detailVerticalSection">' +
                     '<h2 class="sectionTitle sectionTitle-cards">' + (item.Type === 'Series' ? 'Seasons' : 'Episodes') + '</h2>' +
                     '<div id="childrenContent">' + children + '</div></div></div></div>' +
-                    '<div class="detailPageSecondaryContainer padded-left padded-bottom-page"></div></div>';
+                    '<div class="detailPageSecondaryContainer padded-left padded-bottom-page"></div></div></div>';
             }
 
             window.addEventListener('hashchange', drawDetails);
@@ -639,6 +715,14 @@
             phone.checked = Boolean(settings().phone);
             phone.addEventListener('change', function () {
                 save({ phone: phone.checked });
+                window.location.reload();
+            });
+
+            var sleekFin = document.querySelector('.preview-sleekfin-toggle');
+            sleekFin.checked = Boolean(settings().sleekfin);
+            sleekFin.parentNode.hidden = !(fixtures.details && fixtures.details.stylesheets);
+            sleekFin.addEventListener('change', function () {
+                save({ sleekfin: sleekFin.checked });
                 window.location.reload();
             });
 

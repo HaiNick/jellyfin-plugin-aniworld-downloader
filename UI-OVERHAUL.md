@@ -287,3 +287,21 @@ Checked in AniWorld Downloader's code and in real replies:
     of Jellyfin's list. `capture.js` saves `Shows/{id}/Seasons` and
     `FindSource` for library titles.
   - Next: a dev build, and the user's check, also with season posters off.
+- 2026-10-25: At the user's request the season page shows a number instead
+  of the list: "N more episodes on AniWorld" and a **Download** button, in
+  one line under the episode list. It comes from the same counts as the
+  season cards, so the 10 to 15 s `Episodes` call is gone. The count
+  doesn't know about episodes AniWorld Downloader has finished but Jellyfin
+  hasn't scanned yet; the scan after a download fixes that.
+  - The line copies the horizontal padding of the list above it: SleekFin
+    pads its sections 96px (24px on phones), more than Jellyfin's
+    `padded-left`.
+  - The preview can show real pages now. With
+    `window.__aniworldDetailsId` set, `capture.js` opens that series and its
+    first season with missing episodes, and saves both pages as drawn, plus
+    the stylesheets, inline styles and `<html>` classes. The preview's
+    **SleekFin** switch shows those pages with the server's stylesheets;
+    without it the preview keeps the stock look. Captured from "That Time I
+    Got Reincarnated as a Slime" (Season 4: 13 of 24).
+  - Chrome asks before a site's second download, so a second capture needs
+    "allow multiple downloads" for the server.

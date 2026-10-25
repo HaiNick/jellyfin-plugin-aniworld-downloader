@@ -486,9 +486,8 @@
             P + ' .aniworld-queue-more{margin:1em 0 0}',
             P + ' .aniworld-history{margin:.5em 0 1em}',
             // On Jellyfin's season page, under its episode list
-            '.aniworld-missing .paperList{max-width:60em;margin-left:0}',
-            '.aniworld-missing .fieldDescription{margin:.5em 0 0}',
-            '.aniworld-missing .emby-button{margin:1em 0 0}',
+            '.aniworld-missing{display:flex;flex-wrap:wrap;align-items:center;gap:.5em 1em}',
+            '.aniworld-missing .emby-button{margin:0}',
 
             '@media (max-width:40em){' +
             P + ' .aniworld-head{grid-template-columns:6em minmax(0,1fr);grid-template-areas:"poster text" "overview overview";gap:0 1em}' +
@@ -2410,9 +2409,6 @@
     var SOURCE_KEY = 'aniworld-source-';
     var SOURCE_DAYS = { match: 7, none: 1 };
 
-    // Missing episodes listed before "and N more"
-    var MISSING_ROWS = 10;
-
     // Like cached, but a failure is kept too: these run on every redraw of
     // Jellyfin's page, and a downloader that is down shouldn't be asked each time
     var memos = {};
@@ -2523,50 +2519,15 @@
         return count;
     }
 
-    // The season's missing episodes; downloaded ones wait for the library scan
-    function missingEpisodes(seriesId, seasonNumber) {
-        return memo('missing|' + seriesId + '|' + seasonNumber, function () {
-            return seasonOnAniWorld(seriesId, seasonNumber).then(function (found) {
-                if (!found) {
-                    return null;
-                }
-
-                return cached('episodes|' + found.season.url, function () {
-                    return api('GET', 'Episodes?url=' + encodeURIComponent(found.season.url) +
-                        '&seriesUrl=' + encodeURIComponent(found.url));
-                }).then(function (reply) {
-                    var episodes = (reply.episodes || []).filter(function (ep) {
-                        return !ep.downloaded && !found.have[ep.episode_number];
-                    });
-                    return episodes.length ? { url: found.url, season: found.season, episodes: episodes } : null;
-                });
-            });
-        });
-    }
-
-    // padded: SleekFin's own section next to it pads itself, Jellyfin's
-    // containers do that for their children
-    function missingHtml(seasonId, found, info, padded) {
-        var count = found.episodes.length;
-        var rows = found.episodes.slice(0, MISSING_ROWS).map(function (ep) {
-            var name = ep.title_de || ep.title_en || 'Episode ' + ep.episode_number;
-            var languages = (ep.available_languages || []).map(function (lang) {
-                return LANGUAGE_SHORT[lang] || lang;
-            });
-            return '<div class="listItem listItem-border"><div class="listItemBody two-line">' +
-                '<div class="listItemBodyText"><bdi>' + escapeHtml(ep.episode_number + '. ' + name) + '</bdi></div>' +
-                '<div class="listItemBodyText secondary">' + escapeHtml(languages.join(' · ')) + '</div>' +
-                '</div></div>';
-        }).join('');
-
-        return '<div class="verticalSection detailVerticalSection aniworld-missing' + (padded ? ' padded-left padded-right' : '') + '" ' + MARK + ' data-season="' + escapeHtml(seasonId) + '">' +
-            '<h2 class="sectionTitle sectionTitle-cards">Not in your library</h2>' +
-            '<div class="itemsContainer vertical-list paperList">' + rows + '</div>' +
-            (count > MISSING_ROWS ? '<p class="fieldDescription">And ' + (count - MISSING_ROWS) + ' more.</p>' : '') +
+    // One line under the episode list: how many are missing, and a button
+    // that opens the title page with them ticked
+    function missingHtml(seasonId, found, count, info) {
+        return '<div class="detailVerticalSection aniworld-missing" ' + MARK +
+            ' data-season="' + escapeHtml(seasonId) + '">' +
+            '<div>' + escapeHtml(plural(count, 'more episode') + ' on AniWorld') + '</div>' +
             (info.canDownload
                 ? '<a class="raised button-submit emby-button aniworld-missing-download" href="' +
-                escapeHtml(hashFor({ u: found.url, s: String(found.season.season_number), missing: '1' })) + '">Download ' +
-                plural(count, 'episode') + '</a>'
+                escapeHtml(hashFor({ u: found.url, s: String(found.season.season_number), missing: '1' })) + '">Download</a>'
                 : '') +
             '</div>';
     }
@@ -2627,7 +2588,15 @@
         });
     }
 
-    // The "Not in your library" section under the episode list on screen
+    // Indented like the list above it: SleekFin pads its own section, while
+    // Jellyfin's containers pad their children
+    function alignWith(node, anchor) {
+        var style = window.getComputedStyle(anchor);
+        node.style.paddingLeft = style.paddingLeft;
+        node.style.paddingRight = style.paddingRight;
+    }
+
+    // The missing count under the episode list on screen
     function showMissingSection(page, anchor, seriesId, season, info, isShown) {
         var existing = page.querySelector('.aniworld-missing');
         if (existing && existing.getAttribute('data-season') === season.Id) {
@@ -2635,6 +2604,7 @@
                 anchor.after(existing);
             }
 
+            alignWith(existing, anchor);
             return;
         }
 
@@ -2642,9 +2612,12 @@
             existing.remove();
         }
 
-        missingEpisodes(seriesId, season.IndexNumber).then(function (found) {
-            if (found && anchor.isConnected && isShown() && !page.querySelector('.aniworld-missing')) {
-                anchor.after(el(missingHtml(season.Id, found, info, anchor.classList.contains('sleekfin-details-episodes'))));
+        seasonOnAniWorld(seriesId, season.IndexNumber).then(function (found) {
+            var count = found ? missingCount(found) : 0;
+            if (count > 0 && anchor.isConnected && isShown() && !page.querySelector('.aniworld-missing')) {
+                var line = el(missingHtml(season.Id, found, count, info));
+                alignWith(line, anchor);
+                anchor.after(line);
             }
         });
     }
