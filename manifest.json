@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.4.30",
+        "changelog": "Development build of home-row at c922e24. Not a release; it may break.\n\n- download the .NET SDK straight from the CDN, past dotnet-install.sh\n- install .NET from Microsoft's CDN when setup-dotnet fails\n- add a \"New on AniWorld\" row to Jellyfin's home page, with settings\n- point out seasons on AniWorld that Jellyfin doesn't have, with a setting for which\n- show a count of missing episodes instead of a list, and real pages in the preview\n- show missing episodes on Jellyfin's series and season pages",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.4.30/aniworld-downloader_0.2.4.30.zip",
+        "checksum": "25c841a651e7aec2dba925af527af019",
+        "timestamp": "2026-10-25T19:59:06Z"
+      },
+      {
         "version": "0.2.4.27",
         "changelog": "Development build of missing-episodes at 2047171. Not a release; it may break.\n\n- point out seasons on AniWorld that Jellyfin doesn't have, with a setting for which\n- show a count of missing episodes instead of a list, and real pages in the preview\n- show missing episodes on Jellyfin's series and season pages",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.19/aniworld-downloader_0.2.2.19.zip",
         "checksum": "8920715a61500814a700c0f1f0c75314",
         "timestamp": "2026-10-24T19:01:26Z"
-      },
-      {
-        "version": "0.2.2.18",
-        "changelog": "Development build of autosync-page at 4271dbf. Not a release; it may break.\n\n- show speed, time left and errors in the queue, and history in Auto-Sync\n- keep the download bar above a theme's bottom bar\n- lay out the title page like Jellyfin's item page\n- build the plugin page from Jellyfin's own components\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.18/aniworld-downloader_0.2.2.18.zip",
-        "checksum": "c7afd0dbd016fdd86fd46d39ab7f3a1a",
-        "timestamp": "2026-10-24T18:08:11Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
