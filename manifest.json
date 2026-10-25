@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.3.23",
+        "changelog": "Development build of search-filters at 773ee3f. Not a release; it may break.\n\n- style the start page's Show all button like the queue's Show more\n- put the layout switch next to the checkbox and use it on the start page too\n- filter search results in place and add a grid/list switch",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.3.23/aniworld-downloader_0.2.3.23.zip",
+        "checksum": "36127ea323a3b7b1c83fe701d66c92c4",
+        "timestamp": "2026-10-25T16:44:04Z"
+      },
+      {
         "version": "0.2.3.22",
         "changelog": "Development build of search-filters at 2c104c4. Not a release; it may break.\n\n- put the layout switch next to the checkbox and use it on the start page too\n- filter search results in place and add a grid/list switch",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.14/aniworld-downloader_0.2.2.14.zip",
         "checksum": "42061bdc701a298ab72831d2d1495022",
         "timestamp": "2026-10-24T13:41:44Z"
-      },
-      {
-        "version": "0.2.2.13",
-        "changelog": "Development build of autosync-page at c48b218. Not a release; it may break.\n\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.13/aniworld-downloader_0.2.2.13.zip",
-        "checksum": "ba99032589ff417874f1a96b9ef3a838",
-        "timestamp": "2026-10-24T13:08:29Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
