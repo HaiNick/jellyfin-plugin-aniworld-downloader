@@ -134,7 +134,7 @@ Checked in AniWorld Downloader's code and in real replies:
 - **Done when:** The start page shows the banner, the genre rows, and the
   tracked series, and loads no row until it is near the screen.
 
-### [ ] 6. Missing episodes on Jellyfin's series page
+### [x] 6. Missing episodes on Jellyfin's series page
 
 - **Why:** The series page has a single button that opens the AniWorld page.
   You can't see what's missing without leaving it.
@@ -319,3 +319,37 @@ Checked in AniWorld Downloader's code and in real replies:
   - Tried in the preview (Slime: nothing with "newer", "Seasons 1 and 2"
     with "all"; the toolbar has a **Seasons** picker for the setting) and,
     with the branch's client.js loaded by hand, on Euphoria on the server.
+- 2026-10-25: The user checked 0.2.4.27 on the server: the season counts,
+  the line on the season page and the seasons line work. Item 6 is done.
+  Next: item 5, on the `home-row` branch (from `missing-episodes`, which
+  isn't in main yet).
+- 2026-10-25: Item 5 works on the server with SleekFin, with the branch's
+  client.js loaded by hand, at desktop width and in a 390px frame.
+  - The user wants the row after **Next Up**. It is found by its title
+    link (`type=nextup`), since the title is translated. Without one, the
+    row waits 3 s for it and then goes after the first section that shows.
+  - Jellyfin's own row markup, brought to life with
+    `CustomElements.upgradeSubtree`: `emby-scroller` adds its own arrows
+    (writing an `emby-scrollbuttons` as well gave two pairs, one dead), and
+    the items must be an `emby-itemscontainer`, because the home page calls
+    `pause()` on every `.itemsContainer` when it's left (a plain `div`
+    threw "pause is not a function").
+  - All of `Browse/new-animes` and `Browse/new-series`, anime first: 39
+    cards on the server today (the fixtures keep 12 each). The title links
+    to the plugin page. One memo per page load, so a downloader that's
+    down costs one try and shows no row.
+  - The rule hiding a card's title once its poster loaded is no longer
+    scoped to the plugin page.
+  - Not in the preview: it has no home page, and the row needs jellyfin-web's
+    custom elements.
+- 2026-10-25: The home row mixes anime, series and movies, taking turns
+  (the lists have no dates to sort by), at most 20 titles. AniWorld
+  Downloader has no list of new movies, so movies come from
+  `Browse/popular-movies` (the user's choice).
+  - New plugin settings in a **Home page** section, for every user:
+    `HomeRowEnabled`, `HomeRowAnime`, `HomeRowSeries`, `HomeRowMovies` and
+    `HomeRowCount` (1 to 100), sent in `Info` as `homeRow`.
+  - Can't do: `popular-movies` on MegaKino also lists series seasons
+    ("Tulsa King - 4 Staffel"), and the list has no type to filter them by.
+  - Fixed on the way: mirror domains like megakino24 now show their site's
+    name (MegaKino) instead of the host.

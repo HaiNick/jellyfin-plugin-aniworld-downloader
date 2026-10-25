@@ -94,6 +94,43 @@
                     </div>
 
                     <div class="verticalSection">
+                        <h3 class="sectionTitle">Home page</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="HomeRowEnabled" name="HomeRowEnabled" type="checkbox" is="emby-checkbox" />
+                                <span>Show "New on AniWorld" on the home page</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                A row after Next Up, for every user. Movies are AniWorld's popular ones, since it lists
+                                no new movies.
+                            </div>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input id="HomeRowAnime" name="HomeRowAnime" type="checkbox" is="emby-checkbox" />
+                                <span>Anime</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input id="HomeRowSeries" name="HomeRowSeries" type="checkbox" is="emby-checkbox" />
+                                <span>Series</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer">
+                            <label class="emby-checkbox-label">
+                                <input id="HomeRowMovies" name="HomeRowMovies" type="checkbox" is="emby-checkbox" />
+                                <span>Movies</span>
+                            </label>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="HomeRowCount">Number of titles</label>
+                            <input id="HomeRowCount" name="HomeRowCount" type="number" min="1" max="100" is="emby-input" />
+                            <div class="fieldDescription">Anime, series and movies take turns until the row is full.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
                         <h3 class="sectionTitle">Who may download</h3>
                         <div class="fieldDescription" style="margin-bottom:1em">
                             Everyone who is logged in may search. Admins may always download; tick the other users
@@ -157,6 +194,11 @@
                         field('DefaultProvider').value = config.DefaultProvider || 'VOE';
                         field('ScanAfterDownload').checked = config.ScanAfterDownload !== false;
                         field('MissingSeasons').value = config.MissingSeasons || 'newer';
+                        field('HomeRowEnabled').checked = config.HomeRowEnabled !== false;
+                        field('HomeRowAnime').checked = config.HomeRowAnime !== false;
+                        field('HomeRowSeries').checked = config.HomeRowSeries !== false;
+                        field('HomeRowMovies').checked = config.HomeRowMovies !== false;
+                        field('HomeRowCount').value = config.HomeRowCount || 20;
                         r[1].forEach(function (u) { u.Id = normaliseId(u.Id); });
                         renderUsers(r[1], (config.DownloadUserIds || []).map(normaliseId));
                         Dashboard.hideLoadingMsg();
@@ -218,6 +260,11 @@
                         config.DefaultProvider = field('DefaultProvider').value;
                         config.ScanAfterDownload = field('ScanAfterDownload').checked;
                         config.MissingSeasons = field('MissingSeasons').value;
+                        config.HomeRowEnabled = field('HomeRowEnabled').checked;
+                        config.HomeRowAnime = field('HomeRowAnime').checked;
+                        config.HomeRowSeries = field('HomeRowSeries').checked;
+                        config.HomeRowMovies = field('HomeRowMovies').checked;
+                        config.HomeRowCount = Math.min(100, Math.max(1, parseInt(field('HomeRowCount').value, 10) || 20));
                         config.DownloadUserIds = Array.prototype.map.call(
                             page.querySelectorAll('.chkDownloadUser:checked'),
                             function (box) { return box.getAttribute('data-id'); });

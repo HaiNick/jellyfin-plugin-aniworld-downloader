@@ -438,8 +438,9 @@
             // Rows that scroll sideways, like the ones on Jellyfin's home page
             P + ' .aniworld-row{display:flex;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}',
             P + ' .aniworld-row > .card{flex:none;scroll-snap-align:start}',
-            P + ' .cardImageContainer.aniworld-has-image > .cardDefaultText,' +
-            P + ' .cardImageContainer.aniworld-has-image > .cardImageIcon{display:none}',
+            // Also on Jellyfin's home page, for the "New on AniWorld" row
+            '.cardImageContainer.aniworld-has-image > .cardDefaultText,' +
+            '.cardImageContainer.aniworld-has-image > .cardImageIcon{display:none}',
 
             // Title page: a small poster beside the name, the overview under
             // the name, and on phones under both
@@ -965,7 +966,9 @@
                 return 'sto';
             }
 
-            return host.split('.')[0];
+            // Mirrors carry a number, such as megakino24
+            var name = host.split('.')[0];
+            return Object.keys(SITE_NAMES).filter(function (site) { return name.indexOf(site) === 0; })[0] || name;
         } catch (e) {
             return '';
         }
@@ -2759,6 +2762,148 @@
     }
 
     // ------------------------------------------------------------------
+    // "New on AniWorld" on Jellyfin's home page
+    // ------------------------------------------------------------------
+    // The lists behind the row's types. AniWorld Downloader has no new
+    // movies, so movies are the popular ones.
+    var HOME_LISTS = { anime: 'new-animes', series: 'new-series', movies: 'popular-movies' };
+
+    // How long the row waits for the "Next Up" row before it takes the
+    // first section instead; Jellyfin fills its rows one after the other
+    var NEXT_UP_WAIT = 3000;
+
+    // The titles of the types the settings pick, taking turns (AniWorld's
+    // lists have no dates to sort them by), at most count of them; empty
+    // when AniWorld Downloader can't be reached. Once per page load, a
+    // failure too.
+    function newOnAniWorld(settings) {
+        var lists = Object.keys(HOME_LISTS).filter(function (type) {
+            return settings[type] !== false;
+        }).map(function (type) {
+            return HOME_LISTS[type];
+        });
+
+        return memo('home-new', function () {
+            return Promise.all(lists.map(function (list) {
+                return cached('browse|' + list, function () {
+                    return api('GET', 'Browse/' + list);
+                }).catch(function () {
+                    return {};
+                });
+            })).then(function (replies) {
+                var queues = replies.map(function (reply) { return (reply.results || []).slice(); });
+                var count = Math.min(100, Math.max(1, Number(settings.count) || 20));
+                var seen = {};
+                var titles = [];
+                while (titles.length < count && queues.some(function (queue) { return queue.length; })) {
+                    queues.forEach(function (queue) {
+                        var item = queue.shift();
+                        if (item && !seen[item.url] && titles.length < count) {
+                            seen[item.url] = true;
+                            titles.push(item);
+                        }
+                    });
+                }
+
+                return titles;
+            });
+        });
+    }
+
+    // Jellyfin's home row markup. The scroller adds its own arrow buttons
+    // when it is upgraded, so they aren't written here.
+    function homeRowHtml() {
+        return '<div class="verticalSection emby-scroller-container aniworld-home" ' + MARK + '>' +
+            '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left">' +
+            '<a is="emby-linkbutton" class="more button-flat button-flat-mini sectionTitleTextButton emby-button" href="' + ROUTE + '">' +
+            '<h2 class="sectionTitle sectionTitle-cards">New on AniWorld</h2>' + materialIcon('chevron_right') + '</a></div>' +
+            '<div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale emby-scroller" data-centerfocus="true">' +
+            '<div is="emby-itemscontainer" class="itemsContainer scrollSlider focuscontainer-x" data-multiselect="false"></div>' +
+            '</div></div>';
+    }
+
+    // The home tab's sections on screen; SleekFin keeps them where Jellyfin does
+    function homeSections() {
+        var all = document.querySelectorAll('#indexPage #homeTab.is-active .sections');
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].offsetParent !== null) {
+                return all[i];
+            }
+        }
+
+        return null;
+    }
+
+    // After "Next Up", found by its link since its title is translated.
+    // Without it, after the first section that shows, once Jellyfin had
+    // time to draw "Next Up".
+    function homeRowPlace(sections) {
+        var children = Array.prototype.slice.call(sections.children);
+        var nextUp = children.filter(function (section) {
+            return section.querySelector('a[href*="type=nextup" i]');
+        })[0];
+        if (nextUp) {
+            return nextUp;
+        }
+
+        if (!sections.aniworldSeenAt) {
+            sections.aniworldSeenAt = Date.now();
+            window.setTimeout(update, NEXT_UP_WAIT);
+        }
+
+        if (Date.now() - sections.aniworldSeenAt < NEXT_UP_WAIT) {
+            return null;
+        }
+
+        return children.filter(function (section) {
+            return section.offsetParent !== null && section.querySelector('.card');
+        })[0] || null;
+    }
+
+    function addHomeRow() {
+        var sections = window.ApiClient ? homeSections() : null;
+        if (!sections || sections.querySelector('.aniworld-home')) {
+            return;
+        }
+
+        getInfo().then(function (info) {
+            var settings = info.homeRow || {};
+            if (!info.configured || settings.enabled === false) {
+                return;
+            }
+
+            return newOnAniWorld(settings).then(function (items) {
+                var place = homeRowPlace(sections);
+                if (items.length && place && sections.isConnected && !sections.querySelector('.aniworld-home')) {
+                    showHomeRow(place, items);
+                }
+            });
+        }).catch(function () { /* no plugin page reachable, no row */ });
+    }
+
+    function showHomeRow(place, items) {
+        addStyles();
+        var row = el(homeRowHtml());
+        var slider = row.querySelector('.itemsContainer');
+        var params = new URLSearchParams();
+        items.forEach(function (item) {
+            slider.appendChild(makeCard({
+                title: item.title,
+                url: item.url,
+                site: siteFromUrl(item.url),
+                poster_url: item.poster_url,
+                libraryItemId: item.libraryItemId
+            }, params, true));
+        });
+        place.after(row);
+        // Jellyfin's scroller, its arrows, and the pause() and resume()
+        // the home page calls on every row's items
+        if (window.CustomElements && window.CustomElements.upgradeSubtree) {
+            window.CustomElements.upgradeSubtree(row);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Page
     // ------------------------------------------------------------------
     // The sticky download bar needs a solid background, or the episode list
@@ -2917,6 +3062,7 @@
             renderPage();
             addSeriesButton();
             addMissingEpisodes();
+            addHomeRow();
         });
     }
 

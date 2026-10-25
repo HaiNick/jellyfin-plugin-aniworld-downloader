@@ -93,6 +93,14 @@ public class AniWorldProxyController : ControllerBase
             ["defaultLanguage"] = config.DefaultLanguage,
             ["defaultProvider"] = config.DefaultProvider,
             ["missingSeasons"] = config.MissingSeasons,
+            ["homeRow"] = new JsonObject
+            {
+                ["enabled"] = config.HomeRowEnabled,
+                ["anime"] = config.HomeRowAnime,
+                ["series"] = config.HomeRowSeries,
+                ["movies"] = config.HomeRowMovies,
+                ["count"] = Math.Clamp(config.HomeRowCount, 1, 100),
+            },
         });
     }
 

@@ -54,6 +54,33 @@ public class PluginConfiguration : BasePluginConfiguration
     public string MissingSeasons { get; set; } = "newer";
 
     /// <summary>
+    /// Gets or sets a value indicating whether Jellyfin's home page shows the
+    /// "New on AniWorld" row, for every user.
+    /// </summary>
+    public bool HomeRowEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the home row has new anime.
+    /// </summary>
+    public bool HomeRowAnime { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the home row has new series.
+    /// </summary>
+    public bool HomeRowSeries { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the home row has movies. AniWorld
+    /// Downloader has no list of new movies, so these are the popular ones.
+    /// </summary>
+    public bool HomeRowMovies { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many titles the home row shows at most.
+    /// </summary>
+    public int HomeRowCount { get; set; } = 20;
+
+    /// <summary>
     /// Gets or sets the secret that signs poster links, so the image proxy
     /// only fetches what the plugin itself handed out. Made on first use.
     /// </summary>
