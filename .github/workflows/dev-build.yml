@@ -45,12 +45,16 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # Straight from the CDN: dotnet-install.sh asks the origin server first
+      # and gives up there
       - name: Install .NET from the CDN
         if: steps.setup-dotnet.outcome == 'failure'
         run: |
-          curl -sSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
-          bash "$RUNNER_TEMP/dotnet-install.sh" --channel 10.0 --install-dir "$HOME/.dotnet" \
-            --azure-feed https://builds.dotnet.microsoft.com/dotnet
+          cdn=https://builds.dotnet.microsoft.com/dotnet/Sdk
+          version="$(curl -fsSL "$cdn/10.0/latest.version" | head -n 1 | tr -d '\r')"
+          echo "Installing the .NET SDK $version"
+          mkdir -p "$HOME/.dotnet"
+          curl -fsSL "$cdn/$version/dotnet-sdk-$version-linux-x64.tar.gz" | tar -xz -C "$HOME/.dotnet"
           echo "$HOME/.dotnet" >> "$GITHUB_PATH"
           echo "DOTNET_ROOT=$HOME/.dotnet" >> "$GITHUB_ENV"
 
