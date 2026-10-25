@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.2.3.24",
+        "changelog": "Development build of search-filters at cfd2c80. Not a release; it may break.\n\n- keep list rows as wide as their list\n- style the start page's Show all button like the queue's Show more\n- put the layout switch next to the checkbox and use it on the start page too\n- filter search results in place and add a grid/list switch",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.3.24/aniworld-downloader_0.2.3.24.zip",
+        "checksum": "0b430e001dc1df048ba13ae34aaa258a",
+        "timestamp": "2026-10-25T16:47:15Z"
+      },
+      {
         "version": "0.2.3.23",
         "changelog": "Development build of search-filters at 773ee3f. Not a release; it may break.\n\n- style the start page's Show all button like the queue's Show more\n- put the layout switch next to the checkbox and use it on the start page too\n- filter search results in place and add a grid/list switch",
         "targetAbi": "12.2.0.0",
@@ -78,14 +86,6 @@
         "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.15/aniworld-downloader_0.2.2.15.zip",
         "checksum": "14601781a8a430da227825f7595d4229",
         "timestamp": "2026-10-24T17:16:10Z"
-      },
-      {
-        "version": "0.2.2.14",
-        "changelog": "Development build of autosync-page at e7ef230. Not a release; it may break.\n\n- keep hidden elements hidden on the plugin page\n- move the workflows to checkout v7 and setup-dotnet v6\n- add an Auto-Sync page for admins to see and manage tracked series",
-        "targetAbi": "12.2.0.0",
-        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/dev-v0.2.2.14/aniworld-downloader_0.2.2.14.zip",
-        "checksum": "42061bdc701a298ab72831d2d1495022",
-        "timestamp": "2026-10-24T13:41:44Z"
       }
     ],
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png"
