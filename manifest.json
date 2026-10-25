@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/HaiNick/jellyfin-plugin-aniworld-downloader/main/images/logo.png",
     "versions": [
       {
+        "version": "0.2.4.0",
+        "changelog": "- Search: filter results by type, site and \"only titles in my library\" without searching again; the filters stay when you go back from a title\n- Grid or list: switch search results and the start page between posters and a compact list; the choice is remembered on each device\n- Start page as a list: the first 6 titles of each list, with Show all for the rest",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HaiNick/jellyfin-plugin-aniworld-downloader/releases/download/v0.2.4.0/aniworld-downloader_0.2.4.0.zip",
+        "checksum": "49258278bd705e459b38108bbb12e3db",
+        "timestamp": "2026-10-25T16:49:59Z"
+      },
+      {
         "version": "0.2.3.0",
         "changelog": "- Auto-Sync page for admins: every tracked series with its schedule, last check and recent downloads; change, check now or stop syncing a series\n- The plugin page uses Jellyfin's own components, so it follows the theme (SleekFin included)\n- Compact title page: poster, name, genres, overview; episodes Jellyfin already has count as in your library\n- Queue: speed, time left, Auto-Sync or manual, who started it (admins), failed episodes with their errors, and Show more\n- Queue actions: try again, move up or down, remove; admins can clear all finished downloads\n- Fixed: a running download showed the wrong episode number and too little progress\n- On phones, the download bar stays above a theme's bottom bar (SleekFin)",
         "targetAbi": "12.2.0.0",
