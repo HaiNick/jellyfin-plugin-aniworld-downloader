@@ -28,9 +28,22 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
+      # setup-dotnet falls back to Microsoft's origin server, which answered
+      # 409 on 2026-10-25; when it fails, install from Microsoft's CDN instead
       - uses: actions/setup-dotnet@v6
+        id: setup-dotnet
+        continue-on-error: true
         with:
           dotnet-version: "10.0.x"
+
+      - name: Install .NET from the CDN
+        if: steps.setup-dotnet.outcome == 'failure'
+        run: |
+          curl -sSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --channel 10.0 --install-dir "$HOME/.dotnet" \
+            --azure-feed https://builds.dotnet.microsoft.com/dotnet
+          echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$HOME/.dotnet" >> "$GITHUB_ENV"
 
       - name: Read the version from the tag
         id: version
